@@ -18,6 +18,15 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
     @Published var iJustHit: Bool = false
     @Published var iJustKilled: Bool = false
     @Published var errorText: String? = nil
+    @Published var debugLog: [String] = []       // last ~30 lines of activity
+    @Published var rawLastMessage: String = ""   // for deep debugging
+
+    private func debug(_ line: String) {
+        let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        debugLog.append("\(stamp) \(line)")
+        if debugLog.count > 30 { debugLog.removeFirst(debugLog.count - 30) }
+        print("[GAMECLIENT] \(line)")
+    }
 
     struct DiscoveredHost: Identifiable, Equatable {
         let id = UUID()
@@ -101,9 +110,11 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
                                 webSocketTask: URLSessionWebSocketTask,
                                 didOpenWithProtocol protocolName: String?) {
         Task { @MainActor in
+            self.debug("WS OPEN")
             if let name = self.pendingJoinName {
                 self.pendingJoinName = nil
                 self.phase = .joining
+                self.debug("auto-sending join name=\(name)")
                 self.send(.join(name: name))
             }
         }
@@ -114,6 +125,7 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
                                 didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
                                 reason: Data?) {
         Task { @MainActor in
+            self.debug("WS CLOSE code=\(closeCode.rawValue)")
             self.phase = .disconnected
             self.errorText = "Connection closed (code \(closeCode.rawValue))"
             self.scheduleReconnect()
@@ -123,18 +135,26 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
     private func receiveLoop() {
         task?.receive { [weak self] result in
             guard let self = self else { return }
-            switch result {
-            case .failure(let err):
-                Task { @MainActor in
+            // Always hop to MainActor — dispatch AND next receive-loop fire there,
+            // preventing races with @Published writes.
+            Task { @MainActor in
+                switch result {
+                case .failure(let err):
+                    self.debug("RX error: \(err.localizedDescription)")
                     self.phase = .disconnected
                     self.errorText = err.localizedDescription
                     self.scheduleReconnect()
+                case .success(let msg):
+                    if case let .string(text) = msg {
+                        self.rawLastMessage = text
+                        if let data = text.data(using: .utf8) {
+                            self.dispatch(data: data)
+                        }
+                    } else if case .data = msg {
+                        self.debug("RX binary ignored")
+                    }
+                    self.receiveLoop()
                 }
-            case .success(let msg):
-                if case let .string(text) = msg, let data = text.data(using: .utf8) {
-                    Task { @MainActor in self.dispatch(data: data) }
-                }
-                self.receiveLoop()
             }
         }
     }
@@ -157,13 +177,22 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
     // ─── dispatch ───────────────────────────────────────────
     private func dispatch(data: Data) {
         let decoder = JSONDecoder()
-        guard let msg = try? decoder.decode(ServerMessage.self, from: data) else { return }
+        let msg: ServerMessage
+        do {
+            msg = try decoder.decode(ServerMessage.self, from: data)
+        } catch {
+            let preview = String(data: data, encoding: .utf8)?.prefix(80) ?? ""
+            debug("DECODE FAIL: \(error.localizedDescription) · \(preview)")
+            return
+        }
         switch msg {
         case .joined(let p):
             self.me = p
             self.phase = .inLobby
+            debug("JOINED as \(p.name)/\(p.bibId)")
         case .state(let s):
             self.state = s
+            let prev = self.phase
             switch s.phase {
             case "lobby":     if self.me != nil { self.phase = .inLobby }
             case "countdown": self.phase = .countdown
@@ -171,7 +200,11 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
             case "ended":     self.phase = .ended
             default: break
             }
+            if prev != self.phase {
+                debug("STATE phase: \(prev) → \(self.phase) (server=\(s.phase))")
+            }
         case .gameStart:
+            debug("GAME_START → .playing")
             self.phase = .playing
         case .hit(let shooterId, _, _, _):
             if shooterId == me?.id {

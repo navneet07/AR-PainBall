@@ -42,6 +42,11 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSCameraUsageDescription: "GhostPaint uses the camera to detect player bibs during matches."
         NSLocalNetworkUsageDescription: "GhostPaint connects to a local Mac game server on your WiFi or hotspot."
+        NSAppTransportSecurity:
+          # NSAllowsLocalNetworking silently overrides NSAllowsArbitraryLoads
+          # (Apple gotcha). Using arbitrary-loads alone so it ALSO covers
+          # USB-tether IPs like 192.0.0.2 which aren't in RFC1918 space.
+          NSAllowsArbitraryLoads: true
         NSBonjourServices:
           - _ghostpaint._tcp
           - _ghostpaint._tcp.

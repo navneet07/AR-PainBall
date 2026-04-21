@@ -19,6 +19,7 @@
 		AEC03868B4CA8A0BA6A0A6D3 /* LobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27EC093B86C171BC80494E13 /* LobbyView.swift */; };
 		CB14C41054EF774A953BE3AA /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1145F63D6537094C1B52271 /* ARKit.framework */; };
 		CEF05F927717261A40AAF39D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C8B3ADB255F621DD75CDE4 /* Models.swift */; };
+		DA631080A6240BE9013DF6A7 /* DebugOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47CCC39BCFAC1827FAEB6FFE /* DebugOverlay.swift */; };
 		E96280C5D6E39993BC009CBA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9AF84B13B80014C694616EAD /* QuartzCore.framework */; };
 		FD5C0B17B8FF08DDCAC695BD /* QRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6412952F100474E1D20F623E /* QRScanner.swift */; };
 /* End PBXBuildFile section */
@@ -28,7 +29,8 @@
 		17B44E85564C4A171698A174 /* CoreMotion.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMotion.framework; path = System/Library/Frameworks/CoreMotion.framework; sourceTree = SDKROOT; };
 		266BE7AB889707FE2129FBC8 /* GhostPaintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostPaintApp.swift; sourceTree = "<group>"; };
 		27EC093B86C171BC80494E13 /* LobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyView.swift; sourceTree = "<group>"; };
-		31A0FB10B8704CBB8213F75B /* GhostPaint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostPaint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		31A0FB10B8704CBB8213F75B /* GhostPaint.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GhostPaint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		47CCC39BCFAC1827FAEB6FFE /* DebugOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugOverlay.swift; sourceTree = "<group>"; };
 		4D73D1F7C4D09E4CC263D27D /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		6412952F100474E1D20F623E /* QRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScanner.swift; sourceTree = "<group>"; };
 		660940C6CBEE14D3503486B2 /* GameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameView.swift; sourceTree = "<group>"; };
@@ -85,6 +87,7 @@
 		3CB8122A25856012FDA14738 /* GhostPaint */ = {
 			isa = PBXGroup;
 			children = (
+				47CCC39BCFAC1827FAEB6FFE /* DebugOverlay.swift */,
 				0367AEF5AE6D49FDDD45E5A7 /* EndOfMatchView.swift */,
 				D62DE2C3850C00D4A366FC58 /* GameClient.swift */,
 				660940C6CBEE14D3503486B2 /* GameView.swift */,
@@ -137,6 +140,7 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					3819450C206545CBAFA04489 = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -165,6 +169,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA631080A6240BE9013DF6A7 /* DebugOverlay.swift in Sources */,
 				967BA6C43830D87860F26D2A /* EndOfMatchView.swift in Sources */,
 				ADD3C65352A988C6F6C3448E /* GameClient.swift in Sources */,
 				64E096F4F823C4D9662D33B4 /* GameView.swift in Sources */,
@@ -183,7 +188,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = GM6TGDCT4K;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GhostPaint/Info.plist;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
@@ -263,7 +267,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = GM6TGDCT4K;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GhostPaint/Info.plist;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;

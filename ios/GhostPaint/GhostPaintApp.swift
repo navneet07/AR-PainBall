@@ -22,7 +22,7 @@ struct ContentView: View {
     @EnvironmentObject var client: GameClient
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
 
             switch client.phase {
@@ -35,6 +35,9 @@ struct ContentView: View {
             case .ended:
                 EndOfMatchView()
             }
+
+            // Always-visible debug overlay · tap pill to expand
+            DebugOverlay()
         }
         .task { await client.autoConnect() }
     }
