@@ -1,6 +1,32 @@
-# GhostPaint · Session log · 2026-04-21
+# GhostPaint · Session log · 2026-04-21 (updated after demo)
 
 Checkpoint save. Resume from here in the next session.
+
+## 🎮 Demo outcome (2026-04-21 evening)
+
+Live demo ran with **2 players** over the ngrok public tunnel:
+- Tofu (Red Ghost) vs Nitin (Blue Ghost) · full match
+- Multiplayer, HUD, scoreboard, kill feed, hit arbitration all verified live
+- Admin Manager Dashboard worked end-to-end from Mac
+
+**Demo limitation acknowledged:** web version = no real AR camera / no QR
+detection / no haptics. Was the intentional Safari fallback because native
+iOS install never reached server in the session.
+
+## 🎯 Next session goals (user direction · 2026-04-21)
+
+1. **Real iOS native app** — resolve the "packets-not-reaching-server" mystery
+   (never completed the Safari reachability test on each phone — critical
+   first-action for resumption)
+2. **Android port** — NEW target. Currently zero Android code. Options:
+   - SwiftUI → Kotlin/Compose rewrite (feature parity, ~1-2 weekend port)
+   - React Native or Flutter cross-platform (new stack, ~week)
+   - Unity AR Foundation (heavier, but does iOS + Android + AR with shared code)
+3. **Proper build pipeline** — right now iOS is free-tier personal team
+   (7-day expiry). For real testing with friends: Apple Developer Program
+   ($99/yr · TestFlight) or switch to cross-platform stack.
+
+
 
 ---
 
