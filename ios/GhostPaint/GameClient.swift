@@ -43,24 +43,63 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
     private var savedName: String? = nil         // for reconnect
 
     // ─── Bonjour discovery ──────────────────────────────────
+    // Browses for _ghostpaint._tcp services on local.  For each service found,
+    // opens a short-lived NWConnection to resolve the real hostname + port,
+    // then populates discoveredHosts with usable IP:port pairs.
     func startBrowsing() {
         let params = NWParameters()
         params.includePeerToPeer = false
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_ghostpaint._tcp", domain: "local."), using: params)
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             Task { @MainActor in
-                self?.discoveredHosts = results.compactMap { result in
-                    if case let .service(name, _, _, _) = result.endpoint {
-                        // NWBrowser doesn't directly give IP; we'd resolve via NWConnection in v2.
-                        // For v1, rely on manual IP entry fallback.
-                        return DiscoveredHost(name: name, host: "\(name).local.", port: 8200)
-                    }
-                    return nil
+                for result in results {
+                    self?.resolve(result)
                 }
             }
         }
         browser.start(queue: .main)
         self.browser = browser
+    }
+
+    private func resolve(_ result: NWBrowser.Result) {
+        guard case let .service(serviceName, _, _, _) = result.endpoint else { return }
+        let conn = NWConnection(to: result.endpoint, using: .tcp)
+        conn.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                // Extract resolved remote endpoint → real host + port
+                if let remote = conn.currentPath?.remoteEndpoint {
+                    if case let .hostPort(host, port) = remote {
+                        let hostString: String = {
+                            switch host {
+                            case .name(let n, _): return n
+                            case .ipv4(let a):    return "\(a)"
+                            case .ipv6(let a):    return "\(a)"
+                            @unknown default:     return "\(host)"
+                            }
+                        }()
+                        Task { @MainActor in
+                            let entry = DiscoveredHost(name: serviceName, host: hostString, port: Int(port.rawValue))
+                            self?.upsertDiscoveredHost(entry)
+                        }
+                    }
+                }
+                conn.cancel()
+            case .failed, .cancelled:
+                conn.cancel()
+            default:
+                break
+            }
+        }
+        conn.start(queue: .main)
+    }
+
+    private func upsertDiscoveredHost(_ h: DiscoveredHost) {
+        if let idx = discoveredHosts.firstIndex(where: { $0.name == h.name }) {
+            discoveredHosts[idx] = h
+        } else {
+            discoveredHosts.append(h)
+        }
     }
 
     func autoConnect() async {

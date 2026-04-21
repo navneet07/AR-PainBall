@@ -29,7 +29,7 @@
 		17B44E85564C4A171698A174 /* CoreMotion.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMotion.framework; path = System/Library/Frameworks/CoreMotion.framework; sourceTree = SDKROOT; };
 		266BE7AB889707FE2129FBC8 /* GhostPaintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostPaintApp.swift; sourceTree = "<group>"; };
 		27EC093B86C171BC80494E13 /* LobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyView.swift; sourceTree = "<group>"; };
-		31A0FB10B8704CBB8213F75B /* GhostPaint.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GhostPaint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		31A0FB10B8704CBB8213F75B /* GhostPaint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostPaint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		47CCC39BCFAC1827FAEB6FFE /* DebugOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugOverlay.swift; sourceTree = "<group>"; };
 		4D73D1F7C4D09E4CC263D27D /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		6412952F100474E1D20F623E /* QRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScanner.swift; sourceTree = "<group>"; };
@@ -140,7 +140,6 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					3819450C206545CBAFA04489 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -188,6 +187,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = GM6TGDCT4K;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GhostPaint/Info.plist;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
@@ -268,6 +268,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = GM6TGDCT4K;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GhostPaint/Info.plist;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;

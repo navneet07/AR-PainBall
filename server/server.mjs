@@ -20,6 +20,49 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.GHOSTPAINT_PORT || 8200);
 const STATE = newState();
 
+// ─── MANAGER METRICS · streaming telemetry for admin dashboard ───
+const METRICS = {
+  startedAt: Date.now(),
+  totalConnections: 0,
+  currentPlayers: 0,
+  currentSpectators: 0,
+  messagesReceived: 0,
+  messagesPerSecond: 0,
+  lastMessageAt: 0,
+  events: [],              // ring buffer of {ts, severity, source, text}
+  playerActivity: {},      // playerId → { lastMessageAt, messagesSent }
+};
+function recordEvent(severity, source, text) {
+  const evt = { ts: Date.now(), severity, source, text };
+  METRICS.events.push(evt);
+  if (METRICS.events.length > 100) METRICS.events.shift();
+  // also push to spectators so admin dashboard streams live
+  for (const s of SPECTATORS) send(s, { type: 'event', event: evt });
+}
+// Recalculate msg-rate every 2s
+setInterval(() => {
+  METRICS.messagesPerSecond = Math.round(METRICS._recentMsgs / 2);
+  METRICS._recentMsgs = 0;
+  // also push periodic metric snapshot to spectators
+  for (const s of SPECTATORS) send(s, { type: 'metrics', metrics: publicMetrics() });
+}, 2000);
+METRICS._recentMsgs = 0;
+
+function publicMetrics() {
+  const uptimeSec = Math.floor((Date.now() - METRICS.startedAt) / 1000);
+  return {
+    uptimeSec,
+    totalConnections: METRICS.totalConnections,
+    currentPlayers: METRICS.currentPlayers,
+    currentSpectators: METRICS.currentSpectators,
+    messagesReceived: METRICS.messagesReceived,
+    messagesPerSecond: METRICS.messagesPerSecond,
+    lastMessageAt: METRICS.lastMessageAt,
+    events: METRICS.events.slice(-30),
+    playerActivity: METRICS.playerActivity,
+  };
+}
+
 // ─── HTTP server · serves admin + fake-client + static ──────
 const server = http.createServer((req, res) => {
   let file = req.url === '/' ? '/admin.html' : req.url;
@@ -73,16 +116,24 @@ wss.on('connection', (ws, req) => {
   const role = url.searchParams.get('role') || 'player';
   const remote = req.socket.remoteAddress || '?';
   console.log(`[WS] ${role} connected from ${remote}`);
+  METRICS.totalConnections++;
 
   if (role === 'spectator') {
     SPECTATORS.add(ws);
+    METRICS.currentSpectators++;
+    recordEvent('info', 'spectator', `spectator joined from ${remote}`);
     send(ws, { type: 'state', state: publicState(STATE) });
+    send(ws, { type: 'metrics', metrics: publicMetrics() });
     ws.on('close', () => {
       SPECTATORS.delete(ws);
+      METRICS.currentSpectators--;
       console.log(`[WS] spectator disconnected from ${remote}`);
     });
     return;
   }
+
+  METRICS.currentPlayers++;
+  recordEvent('info', 'player', `player connected from ${remote}`);
 
   // ─── player connection ──────────────────────────────────
   let playerId = null;
@@ -91,15 +142,30 @@ wss.on('connection', (ws, req) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch (e) {
       console.log(`[WS] ${remote} bad JSON: ${raw.toString().slice(0, 80)}`);
+      recordEvent('warn', 'parse', `bad JSON from ${remote}`);
       return;
+    }
+    METRICS.messagesReceived++;
+    METRICS._recentMsgs++;
+    METRICS.lastMessageAt = Date.now();
+    if (playerId) {
+      METRICS.playerActivity[playerId] = {
+        lastMessageAt: Date.now(),
+        messagesSent: (METRICS.playerActivity[playerId]?.messagesSent || 0) + 1,
+        name: STATE.players.get(playerId)?.name,
+      };
     }
     console.log(`[WS] ${remote} msg.type=${msg.type}${msg.name ? ' name=' + msg.name : ''}`);
 
     switch (msg.type) {
       case 'join': {
         const { ok, player, error } = addPlayer(STATE, ws, msg.name);
-        if (!ok) return send(ws, { type: 'error', error });
+        if (!ok) {
+          recordEvent('error', 'join', `join rejected: ${error}`);
+          return send(ws, { type: 'error', error });
+        }
         playerId = player.id;
+        recordEvent('join', 'player', `${player.name} joined as ${player.bibName}`);
         send(ws, { type: 'joined', you: publicPlayer(player) });
         publishLobby();
         break;
@@ -147,6 +213,19 @@ wss.on('connection', (ws, req) => {
         for (const { scope, playerId: pid, msg: m } of msgs) {
           if (scope === 'self') sendTo(pid, m);
           else broadcast(m);
+          // capture game events in manager log
+          if (m.type === 'kill') {
+            const sh = STATE.players.get(m.shooterId)?.name;
+            const vi = STATE.players.get(m.victimId)?.name;
+            recordEvent('kill', 'match', `${sh} eliminated ${vi}`);
+          } else if (m.type === 'hit') {
+            const sh = STATE.players.get(m.shooterId)?.name;
+            const vi = STATE.players.get(m.victimId)?.name;
+            recordEvent('hit', 'match', `${sh} → ${vi} · ${m.damage} dmg · hp=${m.hp}`);
+          } else if (m.type === 'game_end') {
+            const winner = STATE.players.get(m.winnerId)?.name || 'nobody';
+            recordEvent('win', 'match', `match ended · ${winner} wins (${m.reason})`);
+          }
         }
         if (msgs.length) publishLobby();
         break;
@@ -178,6 +257,10 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     console.log(`[WS] player disconnected from ${remote}${playerId ? ' (was player ' + playerId.slice(0,8) + ')' : ''}`);
+    METRICS.currentPlayers = Math.max(0, METRICS.currentPlayers - 1);
+    const p = playerId ? STATE.players.get(playerId) : null;
+    const who = p?.name || remote;
+    recordEvent('warn', 'player', `disconnect: ${who} left`);
     if (playerId) {
       removePlayer(STATE, playerId);
       publishLobby();
