@@ -2,7 +2,7 @@
 // Feed it CVPixelBuffer from ARKit; get back [DetectedBib].
 
 import Foundation
-import Vision
+@preconcurrency import Vision
 import CoreVideo
 import CoreGraphics
 import QuartzCore
@@ -21,28 +21,30 @@ final class QRScanner: ObservableObject {
     private var lastRunAt: TimeInterval = 0
     private let minInterval: TimeInterval = 1.0 / 15   // 15 fps max to save battery
 
-    func detect(pixelBuffer: CVPixelBuffer) {
+    nonisolated func detect(pixelBuffer: CVPixelBuffer) {
         let now = CACurrentMediaTime()
-        guard now - lastRunAt > minInterval else { return }
-        lastRunAt = now
+        Task { @MainActor in
+            guard now - self.lastRunAt > self.minInterval else { return }
+            self.lastRunAt = now
+            self.runDetection(pixelBuffer: pixelBuffer, now: now)
+        }
+    }
 
-        let req = VNDetectBarcodesRequest { [weak self] request, _ in
-            guard let self = self else { return }
-            let observations = (request.results as? [VNBarcodeObservation]) ?? []
+    private func runDetection(pixelBuffer: CVPixelBuffer, now: TimeInterval) {
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let req = VNDetectBarcodesRequest()
+            req.symbologies = [VNBarcodeSymbology.qr]
+            try? handler.perform([req])
+            let observations: [VNBarcodeObservation] = req.results ?? []
             let bibs: [DetectedBib] = observations.compactMap { obs in
                 guard obs.symbology == VNBarcodeSymbology.qr else { return nil }
                 guard let payload = obs.payloadStringValue, payload.hasPrefix("bib-") else { return nil }
                 return DetectedBib(payload: payload, boundingBox: obs.boundingBox, timestamp: now)
             }
-            Task { @MainActor in
-                self.visibleBibs = bibs
+            Task { @MainActor [weak self] in
+                self?.visibleBibs = bibs
             }
-        }
-        req.symbologies = [VNBarcodeSymbology.qr]
-
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
-        DispatchQueue.global(qos: .userInitiated).async {
-            try? handler.perform([req])
         }
     }
 
