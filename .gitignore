@@ -1,0 +1,32 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# macOS
+.DS_Store
+
+# Xcode / iOS
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.ipa
+*.dSYM
+*.dSYM.zip
+Pods/
+
+# bibs.html is generated on demand — but commit it once for convenience
+# (uncomment to exclude)
+# bibs/bibs.html
+
+# Runtime state (future)
+coach-sessions/
+session-recordings/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

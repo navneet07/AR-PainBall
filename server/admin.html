@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GhostPaint · Admin</title>
+<style>
+  :root {
+    --cyan: #5cf6ff; --cyan-dim: rgba(92,246,255,0.5);
+    --amethyst: #c8a6ff; --blood: #ff3040; --gold: #ffd166; --green: #69f0ae;
+    --bg-0: #0a0612; --bg-1: #15102a; --bg-2: #1f1838;
+    --ink: #e9e3ff; --ink-dim: #8b86b3;
+    --glow: 0 0 12px rgba(92,246,255,0.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    min-height: 100vh; }
+  body { display: grid; grid-template-rows: auto 1fr auto;
+    background: radial-gradient(circle at 50% 0%, #1a1438 0%, var(--bg-0) 60%); }
+
+  header { padding: 18px 24px; border-bottom: 1px solid rgba(92,246,255,0.2);
+    display: flex; align-items: center; gap: 20px; background: rgba(10,6,18,0.6); }
+  .brand { color: var(--amethyst); letter-spacing: 0.22em; font-size: 15px; }
+  .title { color: var(--cyan); letter-spacing: 0.15em; font-size: 14px; text-shadow: var(--glow); }
+  .phase-pill { margin-left: auto; padding: 6px 14px; border: 1px solid var(--cyan);
+    border-radius: 3px; color: var(--cyan); font-size: 11px; letter-spacing: 0.2em;
+    text-transform: uppercase; box-shadow: var(--glow); }
+  .phase-pill.playing { color: var(--green); border-color: var(--green); }
+  .phase-pill.countdown { color: var(--gold); border-color: var(--gold); }
+  .phase-pill.ended { color: var(--blood); border-color: var(--blood); }
+
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; width: 100%;
+    display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel { position: relative; border: 1px solid rgba(92,246,255,0.2);
+    background: rgba(31,24,56,0.45); padding: 18px; border-radius: 4px; }
+  .panel::before, .panel::after, .panel > .cb, .panel > .cbr {
+    content: ""; position: absolute; width: 16px; height: 16px;
+    border-color: var(--cyan); box-shadow: var(--glow); }
+  .panel::before { top: -1px; left: -1px; border-top: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
+  .panel::after  { top: -1px; right: -1px; border-top: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
+  .panel > .cb  { bottom: -1px; left: -1px; border-bottom: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
+  .panel > .cbr { bottom: -1px; right: -1px; border-bottom: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
+  .panel + .panel { margin-top: 16px; }
+
+  h2 { color: var(--cyan); font-size: 12px; letter-spacing: 0.18em;
+    text-transform: uppercase; margin: 0 0 14px; font-weight: 500; }
+
+  /* scoreboard */
+  table.scoreboard { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .scoreboard th { text-align: left; color: var(--amethyst); font-weight: 500;
+    padding: 6px 8px; border-bottom: 1px solid rgba(92,246,255,0.15);
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; }
+  .scoreboard td { padding: 10px 8px; border-bottom: 1px solid rgba(92,246,255,0.08); }
+  .scoreboard .color-dot { width: 12px; height: 12px; display: inline-block;
+    border-radius: 2px; vertical-align: middle; margin-right: 8px;
+    box-shadow: 0 0 6px currentColor; }
+  .scoreboard .name { color: var(--cyan); }
+  .scoreboard .dead { opacity: 0.4; }
+  .scoreboard .num { font-variant-numeric: tabular-nums; }
+  .scoreboard .bib { font-size: 11px; color: var(--ink-dim); }
+  .ready { color: var(--green); }
+  .not-ready { color: var(--ink-dim); }
+  .reloading { color: var(--gold); animation: pulse 0.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+  .hp-bar { width: 80px; height: 8px; background: rgba(255,48,64,0.15);
+    border: 1px solid rgba(255,48,64,0.4); border-radius: 1px; overflow: hidden; }
+  .hp-bar .fill { height: 100%; background: var(--blood); box-shadow: 0 0 8px var(--blood);
+    transition: width 0.15s ease-out; }
+
+  .kill-feed { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow: auto; }
+  .kill-feed li { padding: 8px 10px; font-size: 12px; color: var(--ink);
+    border-left: 2px solid var(--blood); background: rgba(255,48,64,0.06); margin-bottom: 6px; }
+  .kill-feed .shooter { color: var(--cyan); }
+  .kill-feed .victim { color: var(--blood); }
+
+  .ctl-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button.primary { background: transparent; border: 1px solid var(--cyan);
+    color: var(--cyan); padding: 10px 18px; font-family: inherit; font-size: 12px;
+    letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;
+    border-radius: 2px; transition: all 0.12s; }
+  button.primary:hover { background: rgba(92,246,255,0.12); box-shadow: var(--glow); }
+  button.danger { border-color: var(--blood); color: var(--blood); }
+  button.danger:hover { background: rgba(255,48,64,0.1); }
+
+  .stat { display: flex; justify-content: space-between; padding: 6px 0;
+    border-bottom: 1px solid rgba(92,246,255,0.08); font-size: 12px; }
+  .stat .k { color: var(--ink-dim); letter-spacing: 0.12em; text-transform: uppercase; font-size: 10px; }
+  .stat .v { color: var(--cyan); }
+
+  footer { padding: 10px; text-align: center; color: var(--ink-dim); font-size: 10px;
+    letter-spacing: 0.16em; border-top: 1px solid rgba(92,246,255,0.1); }
+
+  .big-countdown { font-size: 56px; color: var(--gold); text-align: center;
+    letter-spacing: 0.2em; font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 24px rgba(255,209,102,0.5); }
+  .winner-banner { text-align: center; padding: 20px; border: 2px solid var(--green);
+    color: var(--green); font-size: 20px; letter-spacing: 0.16em; text-transform: uppercase;
+    box-shadow: 0 0 24px rgba(105,240,174,0.5); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">GHOSTPAINT</span>
+  <span class="title">ADMIN · SPECTATOR</span>
+  <span class="phase-pill" id="phase-pill">LOBBY</span>
+</header>
+
+<main>
+  <section>
+    <div class="panel" id="center-panel">
+      <span class="cb"></span><span class="cbr"></span>
+      <h2 id="center-title">Scoreboard</h2>
+      <div id="center-body">
+        <table class="scoreboard">
+          <thead>
+            <tr>
+              <th>Player</th><th>HP</th><th>Ammo</th>
+              <th class="num">Kills</th><th class="num">Deaths</th>
+              <th class="num">Acc</th><th>Ready</th>
+            </tr>
+          </thead>
+          <tbody id="score-body"><tr><td colspan="7" style="text-align:center;color:var(--ink-dim);padding:30px;">No players yet. Open <a style="color:var(--cyan)" href="/fake-client.html" target="_blank">fake-client.html</a> in two tabs to test.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <span class="cb"></span><span class="cbr"></span>
+      <h2>Kill feed</h2>
+      <ul class="kill-feed" id="kill-feed"><li style="border-left:none;background:none;color:var(--ink-dim);">None yet.</li></ul>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <span class="cb"></span><span class="cbr"></span>
+      <h2>Server</h2>
+      <div class="stat"><span class="k">Phase</span><span class="v" id="stat-phase">—</span></div>
+      <div class="stat"><span class="k">Players</span><span class="v" id="stat-count">0</span></div>
+      <div class="stat"><span class="k">Time left</span><span class="v" id="stat-time">—</span></div>
+      <div class="stat"><span class="k">Ready</span><span class="v" id="stat-ready">—</span></div>
+    </div>
+
+    <div class="panel">
+      <span class="cb"></span><span class="cbr"></span>
+      <h2>Host controls</h2>
+      <div class="ctl-row">
+        <button class="primary" id="force-start">Force start</button>
+        <button class="danger" id="end-match">End match</button>
+        <button class="primary" id="reset">Reset lobby</button>
+      </div>
+      <p class="stat" style="border:none;margin-top:10px;">
+        <span class="k">Note</span>
+        <span style="color:var(--ink-dim);font-size:11px;">Force/end require ≥2 players.</span>
+      </p>
+    </div>
+
+    <div class="panel">
+      <span class="cb"></span><span class="cbr"></span>
+      <h2>Test clients</h2>
+      <div class="stat" style="border:none;"><span class="k">Open 2+ tabs</span></div>
+      <a class="primary" style="display:block;text-align:center;text-decoration:none;margin-top:6px;" href="/fake-client.html" target="_blank">→ fake-client.html</a>
+    </div>
+  </aside>
+</main>
+
+<footer>GHOSTPAINT · LOCAL · ZERO CENT TODAY</footer>
+
+<script>
+const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=spectator';
+let ws = null;
+
+function connect() {
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => console.log('[admin] connected');
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'state') render(m.state);
+    else if (m.type === 'kill') flashKill(m);
+  };
+  ws.onclose = () => setTimeout(connect, 1000);
+}
+
+let lastState = null;
+function render(s) {
+  lastState = s;
+  const pill = document.getElementById('phase-pill');
+  pill.textContent = s.phase.toUpperCase();
+  pill.className = 'phase-pill ' + s.phase;
+  document.getElementById('stat-phase').textContent = s.phase;
+  document.getElementById('stat-count').textContent = s.players.length;
+  const readyCount = s.players.filter(p => p.ready).length;
+  document.getElementById('stat-ready').textContent = `${readyCount} / ${s.players.length}`;
+
+  if (s.phase === 'playing' && s.matchEndsAt) {
+    const left = Math.max(0, s.matchEndsAt - Date.now());
+    document.getElementById('stat-time').textContent = Math.floor(left/60000) + ':' + String(Math.floor(left/1000) % 60).padStart(2, '0');
+  } else if (s.phase === 'countdown' && s.countdownEndsAt) {
+    const left = Math.max(0, s.countdownEndsAt - Date.now());
+    document.getElementById('stat-time').textContent = Math.ceil(left/1000) + 's';
+  } else {
+    document.getElementById('stat-time').textContent = '—';
+  }
+
+  // Special phases
+  const centerTitle = document.getElementById('center-title');
+  if (s.phase === 'countdown' && s.countdownEndsAt) {
+    centerTitle.textContent = 'Countdown';
+    const left = Math.ceil((s.countdownEndsAt - Date.now()) / 1000);
+    document.getElementById('center-body').innerHTML = `<div class="big-countdown">${left}</div>`;
+    return;
+  }
+  if (s.phase === 'ended' && s.winner) {
+    centerTitle.textContent = 'Match ended';
+    const w = s.players.find(p => p.id === s.winner);
+    document.getElementById('center-body').innerHTML =
+      `<div class="winner-banner">★ ${w ? w.name : 'No one'} wins</div>` + renderScoreboard(s);
+    return;
+  }
+  centerTitle.textContent = s.phase === 'playing' ? 'Scoreboard · LIVE' : 'Lobby';
+  document.getElementById('center-body').innerHTML = renderScoreboard(s);
+
+  // Kill feed
+  const feed = document.getElementById('kill-feed');
+  if (!s.killFeed?.length) {
+    feed.innerHTML = '<li style="border-left:none;background:none;color:var(--ink-dim);">None yet.</li>';
+  } else {
+    feed.innerHTML = s.killFeed.map(k => {
+      const sh = s.players.find(p => p.id === k.shooterId);
+      const vi = s.players.find(p => p.id === k.victimId);
+      return `<li><span class="shooter" style="color:${sh?.color || 'var(--cyan)'}">${sh?.name || '?'}</span> → <span class="victim" style="color:${vi?.color || 'var(--blood)'}">${vi?.name || '?'}</span></li>`;
+    }).join('');
+  }
+}
+
+function renderScoreboard(s) {
+  if (!s.players.length) {
+    return '<p style="color:var(--ink-dim);text-align:center;padding:30px;">Waiting for players. Open <a style="color:var(--cyan)" href="/fake-client.html" target="_blank">fake-client.html</a> in two tabs.</p>';
+  }
+  const rows = [...s.players].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths)).map(p => {
+    const acc = p.shots ? Math.round(100 * p.hits / p.shots) : 0;
+    return `
+      <tr class="${!p.alive ? 'dead' : ''}">
+        <td><span class="color-dot" style="background:${p.color};color:${p.color}"></span><span class="name">${p.name}</span> <span class="bib">${p.bibName}</span></td>
+        <td><div class="hp-bar"><div class="fill" style="width:${p.hp}%"></div></div><span style="font-size:10px;color:var(--ink-dim);">${p.hp}</span></td>
+        <td class="${p.reloading ? 'reloading' : ''}">${p.reloading ? 'RELOAD' : `${p.ammo}/15`}</td>
+        <td class="num">${p.kills}</td>
+        <td class="num">${p.deaths}</td>
+        <td class="num">${acc}%</td>
+        <td class="${p.ready ? 'ready' : 'not-ready'}">${p.ready ? '✓' : '○'}</td>
+      </tr>
+    `;
+  }).join('');
+  return `<table class="scoreboard">
+    <thead><tr><th>Player</th><th>HP</th><th>Ammo</th><th class="num">Kills</th><th class="num">Deaths</th><th class="num">Acc</th><th>Ready</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function flashKill(m) { /* Could animate a floater; keep minimal for v1 */ }
+
+// Live timer refresh
+setInterval(() => { if (lastState) render(lastState); }, 500);
+
+// Host controls — send as spectator; server could be extended to honor these
+document.getElementById('force-start').addEventListener('click', () => alert('Force-start in host controls: server hook not yet wired. Fake-client "Ready" toggles trigger start automatically.'));
+document.getElementById('end-match').addEventListener('click', () => alert('End-match host-controls hook not yet wired.'));
+document.getElementById('reset').addEventListener('click', () => alert('Reset hook not yet wired. For now: restart server.'));
+
+connect();
+</script>
+</body>
+</html>

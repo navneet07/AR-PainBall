@@ -1,0 +1,372 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1C4495B90FB433F399717228 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A64B6C2751F1926E07C5DF94 /* Network.framework */; };
+		1E7FEE828F6B7A41524A407F /* CoreMotion.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17B44E85564C4A171698A174 /* CoreMotion.framework */; };
+		34E54DD0005D7E0479752E36 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 660E213C9319DF55E6ECEFB3 /* AVFoundation.framework */; };
+		5EA87FD54C96BE7A34A0149D /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D73D1F7C4D09E4CC263D27D /* Vision.framework */; };
+		64E096F4F823C4D9662D33B4 /* GameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 660940C6CBEE14D3503486B2 /* GameView.swift */; };
+		925FED36332C67488B2A0791 /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D537FB30627BC341C0D9D7B6 /* CoreLocation.framework */; };
+		967BA6C43830D87860F26D2A /* EndOfMatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0367AEF5AE6D49FDDD45E5A7 /* EndOfMatchView.swift */; };
+		9D74045B61838CB003297DA8 /* GhostPaintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266BE7AB889707FE2129FBC8 /* GhostPaintApp.swift */; };
+		ADD3C65352A988C6F6C3448E /* GameClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62DE2C3850C00D4A366FC58 /* GameClient.swift */; };
+		AEC03868B4CA8A0BA6A0A6D3 /* LobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27EC093B86C171BC80494E13 /* LobbyView.swift */; };
+		CB14C41054EF774A953BE3AA /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1145F63D6537094C1B52271 /* ARKit.framework */; };
+		CEF05F927717261A40AAF39D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C8B3ADB255F621DD75CDE4 /* Models.swift */; };
+		E96280C5D6E39993BC009CBA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9AF84B13B80014C694616EAD /* QuartzCore.framework */; };
+		FD5C0B17B8FF08DDCAC695BD /* QRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6412952F100474E1D20F623E /* QRScanner.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0367AEF5AE6D49FDDD45E5A7 /* EndOfMatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndOfMatchView.swift; sourceTree = "<group>"; };
+		17B44E85564C4A171698A174 /* CoreMotion.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMotion.framework; path = System/Library/Frameworks/CoreMotion.framework; sourceTree = SDKROOT; };
+		266BE7AB889707FE2129FBC8 /* GhostPaintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostPaintApp.swift; sourceTree = "<group>"; };
+		27EC093B86C171BC80494E13 /* LobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyView.swift; sourceTree = "<group>"; };
+		31A0FB10B8704CBB8213F75B /* GhostPaint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostPaint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D73D1F7C4D09E4CC263D27D /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
+		6412952F100474E1D20F623E /* QRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScanner.swift; sourceTree = "<group>"; };
+		660940C6CBEE14D3503486B2 /* GameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameView.swift; sourceTree = "<group>"; };
+		660E213C9319DF55E6ECEFB3 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		9AF84B13B80014C694616EAD /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		A1145F63D6537094C1B52271 /* ARKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ARKit.framework; path = System/Library/Frameworks/ARKit.framework; sourceTree = SDKROOT; };
+		A64B6C2751F1926E07C5DF94 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
+		D537FB30627BC341C0D9D7B6 /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
+		D62DE2C3850C00D4A366FC58 /* GameClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameClient.swift; sourceTree = "<group>"; };
+		E1008A4F926878744D12310E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E4C8B3ADB255F621DD75CDE4 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3E1F9BFD8B8EC9A71377C964 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB14C41054EF774A953BE3AA /* ARKit.framework in Frameworks */,
+				5EA87FD54C96BE7A34A0149D /* Vision.framework in Frameworks */,
+				1E7FEE828F6B7A41524A407F /* CoreMotion.framework in Frameworks */,
+				925FED36332C67488B2A0791 /* CoreLocation.framework in Frameworks */,
+				34E54DD0005D7E0479752E36 /* AVFoundation.framework in Frameworks */,
+				1C4495B90FB433F399717228 /* Network.framework in Frameworks */,
+				E96280C5D6E39993BC009CBA /* QuartzCore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		158DA808A5AED69D3A60729E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A1145F63D6537094C1B52271 /* ARKit.framework */,
+				660E213C9319DF55E6ECEFB3 /* AVFoundation.framework */,
+				D537FB30627BC341C0D9D7B6 /* CoreLocation.framework */,
+				17B44E85564C4A171698A174 /* CoreMotion.framework */,
+				A64B6C2751F1926E07C5DF94 /* Network.framework */,
+				9AF84B13B80014C694616EAD /* QuartzCore.framework */,
+				4D73D1F7C4D09E4CC263D27D /* Vision.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		213E6CA6CE04056609C88625 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				31A0FB10B8704CBB8213F75B /* GhostPaint.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3CB8122A25856012FDA14738 /* GhostPaint */ = {
+			isa = PBXGroup;
+			children = (
+				0367AEF5AE6D49FDDD45E5A7 /* EndOfMatchView.swift */,
+				D62DE2C3850C00D4A366FC58 /* GameClient.swift */,
+				660940C6CBEE14D3503486B2 /* GameView.swift */,
+				266BE7AB889707FE2129FBC8 /* GhostPaintApp.swift */,
+				E1008A4F926878744D12310E /* Info.plist */,
+				27EC093B86C171BC80494E13 /* LobbyView.swift */,
+				E4C8B3ADB255F621DD75CDE4 /* Models.swift */,
+				6412952F100474E1D20F623E /* QRScanner.swift */,
+			);
+			path = GhostPaint;
+			sourceTree = "<group>";
+		};
+		61D4C326AE60C10A05E4B4E5 = {
+			isa = PBXGroup;
+			children = (
+				3CB8122A25856012FDA14738 /* GhostPaint */,
+				158DA808A5AED69D3A60729E /* Frameworks */,
+				213E6CA6CE04056609C88625 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3819450C206545CBAFA04489 /* GhostPaint */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6C6215E2CE6375AF7E80B5B2 /* Build configuration list for PBXNativeTarget "GhostPaint" */;
+			buildPhases = (
+				F872D99D4A6AB0714AD46B3E /* Sources */,
+				3E1F9BFD8B8EC9A71377C964 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GhostPaint;
+			packageProductDependencies = (
+			);
+			productName = GhostPaint;
+			productReference = 31A0FB10B8704CBB8213F75B /* GhostPaint.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8E52C41E03D6A5AC6FD0DB6B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					3819450C206545CBAFA04489 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 0F0511F0CFEE93D273A7F4F5 /* Build configuration list for PBXProject "GhostPaint" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 61D4C326AE60C10A05E4B4E5;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 213E6CA6CE04056609C88625 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3819450C206545CBAFA04489 /* GhostPaint */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F872D99D4A6AB0714AD46B3E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				967BA6C43830D87860F26D2A /* EndOfMatchView.swift in Sources */,
+				ADD3C65352A988C6F6C3448E /* GameClient.swift in Sources */,
+				64E096F4F823C4D9662D33B4 /* GameView.swift in Sources */,
+				9D74045B61838CB003297DA8 /* GhostPaintApp.swift in Sources */,
+				AEC03868B4CA8A0BA6A0A6D3 /* LobbyView.swift in Sources */,
+				CEF05F927717261A40AAF39D /* Models.swift in Sources */,
+				FD5C0B17B8FF08DDCAC695BD /* QRScanner.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		03833882DA5E2D8A7365501A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = GM6TGDCT4K;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GhostPaint/Info.plist;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIRequiresPersistentWiFi = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nitin.ghostpaint;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0BA570574A4B2C68D153E5FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		89EAE646C1D900F75CB775BC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = GM6TGDCT4K;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GhostPaint/Info.plist;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIRequiresPersistentWiFi = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nitin.ghostpaint;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CBA8AD20C3F5603F405A3A3C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0F0511F0CFEE93D273A7F4F5 /* Build configuration list for PBXProject "GhostPaint" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CBA8AD20C3F5603F405A3A3C /* Debug */,
+				0BA570574A4B2C68D153E5FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6C6215E2CE6375AF7E80B5B2 /* Build configuration list for PBXNativeTarget "GhostPaint" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				03833882DA5E2D8A7365501A /* Debug */,
+				89EAE646C1D900F75CB775BC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8E52C41E03D6A5AC6FD0DB6B /* Project object */;
+}

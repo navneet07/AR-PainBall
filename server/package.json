@@ -1,0 +1,19 @@
+{
+  "name": "ghostpaint-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local LAN game server for GhostPaint — AR paintball over WebSocket",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "bonjour-service": "^1.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
