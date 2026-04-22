@@ -1,0 +1,58 @@
+name: GhostPaint keep-alive
+
+# Pings the Lightning Studio tunnel every 5 minutes so the Studio
+# doesn't idle-sleep. URL is read from server/current-url.txt, which
+# the Studio updates automatically when it (re)starts.
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions cron has ~10-15min jitter on free tier,
+    # which is fine — Lightning's idle timeout is ~60min.
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}  # also allow manual runs from the Actions tab
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: server/current-url.txt
+          sparse-checkout-cone-mode: false
+
+      - name: Read current tunnel URL
+        id: url
+        run: |
+          if [ ! -f server/current-url.txt ]; then
+            echo "No current-url.txt in repo — Studio hasn't booted yet. Skipping."
+            echo "url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          URL=$(cat server/current-url.txt | tr -d '[:space:]')
+          if [ -z "$URL" ]; then
+            echo "current-url.txt is empty. Skipping."
+            echo "url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Pinging: $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Ping /health
+        if: steps.url.outputs.url != ''
+        run: |
+          URL="${{ steps.url.outputs.url }}"
+          # -f fails on 4xx/5xx, --max-time 30 in case tunnel is waking
+          if curl -fs --max-time 30 "$URL/health" | tee -a /tmp/ping.log; then
+            echo ""
+            echo "✅ Studio is awake"
+          else
+            echo "⚠ Ping failed — Studio may be paused. Last response above."
+            # Exit 0 so the workflow doesn't show red every time the Studio
+            # is paused; we only care that we're trying.
+            exit 0
+          fi

@@ -63,6 +63,26 @@ if [ -n "$URL" ]; then
   echo ""
   # write url to a file for downstream scripts
   echo "$URL" > /tmp/ghostpaint-url.txt
+
+  # ─── 6. publish URL to GitHub so iOS + keep-alive can find it ───
+  REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+  URL_FILE="$REPO_DIR/server/current-url.txt"
+  CURRENT="$(cat "$URL_FILE" 2>/dev/null || true)"
+  if [ "$CURRENT" != "$URL" ]; then
+    echo "$URL" > "$URL_FILE"
+    cd "$REPO_DIR"
+    git add server/current-url.txt
+    if git -c user.name=GhostPaintStudio -c user.email=studio@ghostpaint.local \
+         commit -m "chore: publish new tunnel URL ($URL)" > /dev/null 2>&1; then
+      if git push origin main > /dev/null 2>&1; then
+        echo "  📡 URL published to GitHub (clients + keep-alive will pick it up)"
+      else
+        echo "  ⚠ git push failed — check PAT config in ~/.git-credentials"
+      fi
+    fi
+  else
+    echo "  📡 URL unchanged (already published)"
+  fi
 else
   echo "  ⚠ tunnel URL not ready yet — check /tmp/cloudflared.log"
 fi
