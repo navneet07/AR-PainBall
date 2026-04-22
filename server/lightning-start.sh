@@ -24,8 +24,14 @@ pkill -f "node server.mjs" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
 
-# ─── 3. start the game server ────────────────────────────────
+# ─── 3. install deps if missing ──────────────────────────────
 cd "$(dirname "$0")"
+if [ ! -d node_modules ] || [ ! -d node_modules/ws ]; then
+  echo "[+] installing npm deps..."
+  npm install --no-audit --no-fund 2>&1 | tail -3
+fi
+
+# ─── 4. start the game server ────────────────────────────────
 nohup node server.mjs > /tmp/ghostpaint.log 2>&1 &
 SERVER_PID=$!
 echo "[+] server PID=$SERVER_PID"
