@@ -6,6 +6,11 @@
 
 set -e
 
+# Resolve absolute script dir so the repo-path logic below is correct
+# regardless of which cwd the user launched from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # ─── 0. load Node from nvm ────────────────────────────────────
 export NVM_DIR="$HOME/.nvm"
 if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; fi
@@ -25,7 +30,7 @@ pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
 
 # ─── 3. install deps if missing ──────────────────────────────
-cd "$(dirname "$0")"
+cd "$SCRIPT_DIR"
 if [ ! -d node_modules ] || [ ! -d node_modules/ws ]; then
   echo "[+] installing npm deps..."
   npm install --no-audit --no-fund 2>&1 | tail -3
@@ -65,7 +70,6 @@ if [ -n "$URL" ]; then
   echo "$URL" > /tmp/ghostpaint-url.txt
 
   # ─── 6. publish URL to GitHub so iOS + keep-alive can find it ───
-  REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
   URL_FILE="$REPO_DIR/server/current-url.txt"
   CURRENT="$(cat "$URL_FILE" 2>/dev/null || true)"
   if [ "$CURRENT" != "$URL" ]; then
