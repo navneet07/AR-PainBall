@@ -148,27 +148,123 @@
   .fire-btn:active { transform: scale(0.92); background: radial-gradient(circle at 50% 40%, rgba(255,48,64,0.7), rgba(10,6,18,0.9)); }
   .fire-btn[disabled] { opacity: 0.45; border-color: var(--ink-dim); color: var(--ink-dim); box-shadow: none; }
 
-  /* Bib overlays (drawn over camera feed when QR codes are detected) */
+  /* Bib overlays — animated portrait of our ghost mascot over each detected bib */
   #bib-overlays { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
   .bib-overlay {
-    position: absolute; border: 2px solid var(--cyan);
-    box-shadow: 0 0 12px rgba(92,246,255,0.45);
-    transition: border-color 0.1s, box-shadow 0.1s;
-    pointer-events: auto;
+    position: absolute; pointer-events: auto;
+    border-radius: 50%;
+    border: 2px solid var(--cyan);
+    background: radial-gradient(circle at 50% 40%, rgba(26,20,56,0.7), rgba(10,6,18,0.85));
+    box-shadow: 0 0 20px rgba(92,246,255,0.55), inset 0 0 14px rgba(92,246,255,0.18);
+    overflow: visible;
+    transition: border-color 0.12s, box-shadow 0.12s;
+    animation: bibFloat 3s ease-in-out infinite, bibSpawn 0.35s ease-out;
+  }
+  .bib-overlay::before {
+    /* corner brackets — Iron-Man-esque target frame */
+    content: ""; position: absolute; inset: -10px; border-radius: 50%;
+    border: 1px dashed rgba(92,246,255,0.4);
+    animation: bibRing 4s linear infinite;
+    pointer-events: none;
+  }
+  .bib-char {
+    width: 88%; height: 88%; position: absolute; left: 6%; top: 6%;
+    object-fit: contain;
+    filter: drop-shadow(0 0 8px rgba(92,246,255,0.8));
+    animation: bibBreathe 2.2s ease-in-out infinite;
+    pointer-events: none;
   }
   .bib-overlay .tag {
-    position: absolute; top: -22px; left: 0;
-    font-size: 10px; letter-spacing: 0.15em;
-    background: rgba(10,6,18,0.8); color: var(--cyan);
-    padding: 2px 6px; white-space: nowrap;
+    position: absolute; top: -28px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; letter-spacing: 0.18em;
+    background: rgba(10,6,18,0.9); color: var(--cyan);
+    padding: 3px 10px; white-space: nowrap; border-radius: 2px;
+    border: 1px solid rgba(92,246,255,0.4);
   }
+  .bib-overlay .hp-bar-mini {
+    position: absolute; bottom: -14px; left: 10%; right: 10%; height: 4px;
+    background: rgba(255,48,64,0.18); border: 1px solid var(--blood);
+  }
+  .bib-overlay .hp-bar-mini > span {
+    display: block; height: 100%; background: var(--blood);
+    box-shadow: 0 0 6px var(--blood); transition: width 0.2s;
+  }
+  /* AIMED state — red, shaking, intense */
   .bib-overlay.aimed {
     border-color: var(--blood);
-    box-shadow: 0 0 18px var(--blood);
+    box-shadow: 0 0 30px var(--blood), inset 0 0 16px rgba(255,48,64,0.35);
+    animation: bibFloat 0.7s ease-in-out infinite,
+               bibAimedShake 0.18s linear infinite,
+               bibSpawn 0.35s ease-out;
   }
-  .bib-overlay.aimed .tag { color: var(--blood); background: rgba(0,0,0,0.8); }
+  .bib-overlay.aimed::before {
+    border-color: var(--blood); border-style: solid;
+    animation: bibRing 1.2s linear infinite;
+  }
+  .bib-overlay.aimed .bib-char {
+    filter: drop-shadow(0 0 14px var(--blood)) hue-rotate(-30deg) saturate(1.5);
+  }
+  .bib-overlay.aimed .tag { color: var(--blood); border-color: var(--blood); }
+  /* SELF (your own bib seen by your own camera, e.g. mirror) */
   .bib-overlay.me { border-color: var(--ink-dim); opacity: 0.5; }
   .bib-overlay.me .tag { color: var(--ink-dim); }
+  .bib-overlay.me::before { border-color: rgba(139,134,179,0.3); }
+  /* HIT pulse — added briefly when shot lands */
+  .bib-overlay.hit-flash {
+    animation: bibHitFlash 0.45s ease-out;
+  }
+
+  @keyframes bibSpawn {
+    0%   { transform: scale(0.4); opacity: 0; }
+    60%  { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes bibFloat {
+    0%,100% { transform: translateY(0); }
+    50%     { transform: translateY(-5px); }
+  }
+  @keyframes bibBreathe {
+    0%,100% { opacity: 0.85; transform: scale(1); }
+    50%     { opacity: 1; transform: scale(1.06); }
+  }
+  @keyframes bibRing {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes bibAimedShake {
+    0%,100% { transform: translateX(0); }
+    25%     { transform: translateX(-2px); }
+    75%     { transform: translateX(2px); }
+  }
+  @keyframes bibHitFlash {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0.95), 0 0 30px var(--blood); transform: scale(1); }
+    35%  { box-shadow: 0 0 0 14px rgba(255,255,255,0), 0 0 60px var(--blood); transform: scale(1.18); }
+    100% { box-shadow: 0 0 30px var(--blood); transform: scale(1); }
+  }
+
+  /* Muzzle-flash particle burst at hit point */
+  .muzzle-burst {
+    position: fixed; pointer-events: none; z-index: 7;
+    width: 100px; height: 100px; transform: translate(-50%, -50%);
+  }
+  .muzzle-burst .ray {
+    position: absolute; top: 50%; left: 50%; width: 4px; height: 50px;
+    background: linear-gradient(to top, var(--blood), transparent);
+    transform-origin: bottom center;
+    animation: muzzleRay 0.45s ease-out forwards;
+    box-shadow: 0 0 10px var(--blood);
+  }
+  @keyframes muzzleRay {
+    0%   { transform: translate(-50%, -100%) rotate(var(--a)) scaleY(0.3); opacity: 1; }
+    100% { transform: translate(-50%, -180%) rotate(var(--a)) scaleY(1); opacity: 0; }
+  }
+
+  /* Reticle pulse — subtle so it reads as the "where you're pointed" indicator */
+  .reticle .ring { animation: reticlePulse 2s ease-in-out infinite; }
+  @keyframes reticlePulse {
+    0%,100% { opacity: 0.6; transform: scale(1); }
+    50%     { opacity: 1; transform: scale(1.08); }
+  }
 
   /* Fallback "target cards" shown when camera not available */
   .targets { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -680,28 +776,69 @@ function renderBibOverlays() {
     const w = b.bbox.width * scale;
     const h = b.bbox.height * scale;
     if (w < 20 || h < 20) continue;
+    // Make the overlay a bit bigger than the QR for character to fit comfortably
+    const padding = Math.max(20, w * 0.3);
+    const ox = x - padding/2, oy = y - padding/2;
+    const ow = w + padding, oh = h + padding;
     const p = state?.players.find(pl => pl.bibId === b.bibId);
     const myBib = me?.bibId;
     const div = document.createElement('div');
     div.className = 'bib-overlay';
     if (aimedBib === b.bibId) div.classList.add('aimed');
     if (b.bibId === myBib)    div.classList.add('me');
-    div.style.left = x + 'px'; div.style.top = y + 'px';
-    div.style.width = w + 'px'; div.style.height = h + 'px';
+    div.style.left = ox + 'px'; div.style.top = oy + 'px';
+    div.style.width = ow + 'px'; div.style.height = oh + 'px';
+    div.dataset.bib = b.bibId;
+
+    // Animated character (our ghost mascot)
+    const img = document.createElement('img');
+    img.src = 'icon.svg';
+    img.className = 'bib-char';
+    img.alt = '';
+    div.appendChild(img);
+
+    // Floating name tag above
     const tag = document.createElement('div');
     tag.className = 'tag';
-    tag.textContent = (p?.name || b.bibId) + (p ? (' · hp ' + p.hp) : '');
+    tag.textContent = p?.name || b.bibId;
     div.appendChild(tag);
+
+    // Mini HP bar below (only if we have player data)
+    if (p) {
+      const hpBar = document.createElement('div');
+      hpBar.className = 'hp-bar-mini';
+      const hpFill = document.createElement('span');
+      hpFill.style.width = Math.max(0, Math.min(100, p.hp)) + '%';
+      hpBar.appendChild(hpFill);
+      div.appendChild(hpBar);
+    }
+
     if (b.bibId !== myBib) {
       // Tap bib = aim + fire in one gesture (arcade-shooter UX)
       div.addEventListener('click', () => {
         aimedBib = b.bibId;
         updateFireBtnState();
-        fire();
+        fire(div);
       });
     }
     container.appendChild(div);
   }
+}
+
+// ─── visual effects ──────────────────────────────────────
+function muzzleBurstAt(x, y) {
+  const burst = document.createElement('div');
+  burst.className = 'muzzle-burst';
+  burst.style.left = x + 'px';
+  burst.style.top  = y + 'px';
+  for (let i = 0; i < 8; i++) {
+    const ray = document.createElement('div');
+    ray.className = 'ray';
+    ray.style.setProperty('--a', (i * 45) + 'deg');
+    burst.appendChild(ray);
+  }
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 500);
 }
 
 function updateFireBtnState() {
@@ -847,14 +984,27 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;'
 setInterval(() => { if (state) render(); }, 500);
 
 // ─── fire ────────────────────────────────────────────────
-function fire() {
+function fire(srcEl) {
   if (!aimedBib) return;
   send({ type: 'fire', targetBib: aimedBib });
   $('reticle').classList.add('hit');
   setTimeout(() => $('reticle').classList.remove('hit'), 300);
   haptic(30);
+
+  // Locate the targeted bib element (passed in or looked up by data-bib)
+  let target = srcEl;
+  if (!target) target = document.querySelector(`.bib-overlay[data-bib="${aimedBib}"]`);
+  if (target) {
+    const r = target.getBoundingClientRect();
+    muzzleBurstAt(r.left + r.width/2, r.top + r.height/2);
+    target.classList.add('hit-flash');
+    setTimeout(() => target.classList.remove('hit-flash'), 450);
+  } else {
+    // Fallback: burst at reticle (screen center)
+    muzzleBurstAt(window.innerWidth/2, window.innerHeight/2);
+  }
 }
-$('fire-btn').addEventListener('click', fire);
+$('fire-btn').addEventListener('click', () => fire());
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); fire(); }
 });
