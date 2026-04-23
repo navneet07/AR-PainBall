@@ -693,7 +693,12 @@ function renderBibOverlays() {
     tag.textContent = (p?.name || b.bibId) + (p ? (' · hp ' + p.hp) : '');
     div.appendChild(tag);
     if (b.bibId !== myBib) {
-      div.addEventListener('click', () => { aimedBib = b.bibId; updateFireBtnState(); });
+      // Tap bib = aim + fire in one gesture (arcade-shooter UX)
+      div.addEventListener('click', () => {
+        aimedBib = b.bibId;
+        updateFireBtnState();
+        fire();
+      });
     }
     container.appendChild(div);
   }
@@ -786,7 +791,7 @@ function render() {
         if (card.classList.contains('dead')) return;
         aimedBib = card.dataset.bib;
         updateFireBtnState();
-        render();
+        fire();
       });
     });
 
