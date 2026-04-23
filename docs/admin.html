@@ -161,6 +161,35 @@
   <span class="phase-pill" id="phase-pill">LOBBY</span>
 </header>
 
+<section id="rooms-bar" style="padding: 14px 24px; border-bottom: 1px solid rgba(92,246,255,0.15); background: rgba(10,6,18,0.4);">
+  <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+    <button id="create-room-btn" style="
+      background: transparent; color: var(--green); border: 1px solid var(--green);
+      padding: 12px 22px; font-family: inherit; font-size: 12px; letter-spacing: 0.2em;
+      text-transform: uppercase; cursor: pointer; border-radius: 3px;
+      box-shadow: 0 0 12px rgba(105,240,174,0.25);">
+      ＋ CREATE NEW ROOM
+    </button>
+    <div id="active-rooms-list" style="display:flex;gap:10px;flex-wrap:wrap;flex:1;"></div>
+    <div id="create-status" style="font-size:10px;color:var(--ink-dim);letter-spacing:0.14em;"></div>
+  </div>
+</section>
+
+<style>
+  .room-chip { display:flex; align-items:center; gap:8px; padding:8px 12px;
+    border: 1px solid var(--gold); background: rgba(255,209,102,0.08);
+    border-radius: 3px; font-size: 11px; letter-spacing: 0.12em; }
+  .room-chip .code { color: var(--gold); font-size: 15px; letter-spacing: 0.3em;
+    font-variant-numeric: tabular-nums; font-weight: 500; }
+  .room-chip .meta { color: var(--ink-dim); font-size: 9px; }
+  .room-chip .phase { padding: 2px 6px; font-size: 9px; border: 1px solid var(--cyan); color: var(--cyan); letter-spacing: 0.14em; }
+  .room-chip .phase.playing { color: var(--green); border-color: var(--green); }
+  .room-chip button { background: transparent; border: 1px solid var(--blood);
+    color: var(--blood); font-family: inherit; font-size: 9px; padding: 3px 8px;
+    cursor: pointer; letter-spacing: 0.15em; border-radius: 2px; }
+  .room-chip .copy-btn { border-color: var(--cyan); color: var(--cyan); }
+</style>
+
 <main>
 
   <!-- Zone A · live scoreboard -->
@@ -241,19 +270,72 @@ async function connect() {
     if (!wsOrigin) wsOrigin = await resolveOrigin();
     const wsUrl = wsOrigin.replace(/^http/, 'ws') + '/ws?role=spectator';
     ws = new WebSocket(wsUrl);
-    ws.onopen = () => { console.log('admin WS open'); };
+    ws.onopen = () => {
+      console.log('admin WS open');
+      document.getElementById('create-status').textContent = '✓ Connected to server';
+    };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === 'state') { state = m.state; render(); }
-      else if (m.type === 'metrics') { metrics = m.metrics; renderMetrics(); }
+      else if (m.type === 'metrics') { metrics = m.metrics; renderMetrics(); renderActiveRooms(); }
       else if (m.type === 'event') { eventBuffer.push(m.event); if (eventBuffer.length > 100) eventBuffer.shift(); renderEvents(); }
+      else if (m.type === 'admin_room_created') { flashNewRoom(m.code); }
+      else if (m.type === 'admin_room_closed') { /* metrics will refresh within 2s */ }
     };
-    ws.onclose = () => { wsOrigin = null; setTimeout(connect, 1500); };
+    ws.onclose = () => {
+      wsOrigin = null;
+      document.getElementById('create-status').textContent = '⚠ Disconnected — reconnecting…';
+      setTimeout(connect, 1500);
+    };
     ws.onerror = () => { console.error('admin WS error'); };
   } catch (e) {
     console.error('bootstrap failed:', e);
+    document.getElementById('create-status').textContent = '⚠ ' + e.message;
     setTimeout(connect, 3000);
   }
+}
+
+// ───── room management ─────
+document.getElementById('create-room-btn').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) {
+    document.getElementById('create-status').textContent = '⚠ Not connected — wait…';
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'admin_create_room' }));
+  document.getElementById('create-status').textContent = 'Creating room…';
+});
+
+function flashNewRoom(code) {
+  document.getElementById('create-status').textContent = `✅ Room ${code} created — share this code with players`;
+  // Copy to clipboard
+  try { navigator.clipboard.writeText(code); } catch {}
+}
+
+function closeRoom(code) {
+  if (!confirm(`Close room ${code}? All players inside will be disconnected.`)) return;
+  if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'admin_close_room', code }));
+}
+
+function copyCode(code) {
+  try {
+    navigator.clipboard.writeText(code);
+    document.getElementById('create-status').textContent = `Copied ${code} to clipboard`;
+  } catch {}
+}
+
+function renderActiveRooms() {
+  const rooms = (metrics && metrics.rooms) || [];
+  const el = document.getElementById('active-rooms-list');
+  if (!rooms.length) { el.innerHTML = '<span style="color:var(--ink-dim);font-size:10px;letter-spacing:0.14em;">No active rooms</span>'; return; }
+  el.innerHTML = rooms.map(r => `
+    <div class="room-chip">
+      <span class="code">${r.code}</span>
+      <span class="phase ${r.phase}">${r.phase.toUpperCase()}</span>
+      <span class="meta">${r.playerCount}p · ${r.spectatorCount}s</span>
+      <button class="copy-btn" onclick="copyCode('${r.code}')">COPY</button>
+      <button onclick="closeRoom('${r.code}')">× END</button>
+    </div>
+  `).join('');
 }
 
 // ───── renderers ─────

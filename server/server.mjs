@@ -237,6 +237,25 @@ wss.on('connection', (ws, req) => {
       GLOBAL_SPECTATORS.add(ws);
       recordEvent('info', 'spectator', `admin dashboard connected from ${remote}`);
       send(ws, { type: 'metrics', metrics: publicMetrics() });
+      // Admins can spawn empty rooms from the dashboard
+      ws.on('message', (raw) => {
+        let msg;
+        try { msg = JSON.parse(raw.toString()); } catch { return; }
+        if (msg.type === 'admin_create_room') {
+          const r = createRoom();
+          recordEvent('info', 'room', `admin spawned room ${r.code}`);
+          logGameEvent(r, 'admin_created', { remote });
+          send(ws, { type: 'admin_room_created', code: r.code });
+        } else if (msg.type === 'admin_close_room' && msg.code && ROOMS.has(msg.code)) {
+          const r = ROOMS.get(msg.code);
+          // Kick all players (they'll see socket close)
+          for (const p of r.state.players.values()) { try { p.ws.close(); } catch {} }
+          clearTimeout(r.matchTimer);
+          ROOMS.delete(msg.code);
+          recordEvent('warn', 'room', `admin closed room ${msg.code}`);
+          send(ws, { type: 'admin_room_closed', code: msg.code });
+        }
+      });
       ws.on('close', () => GLOBAL_SPECTATORS.delete(ws));
     }
     return;
