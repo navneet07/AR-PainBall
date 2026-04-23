@@ -596,6 +596,12 @@ function send(msg) { if (ws?.readyState === 1) ws.send(JSON.stringify(msg)); }
 function handle(m) {
   switch (m.type) {
     case 'room_joined':
+      // Zombies room → switch to the zombies multiplayer page
+      if (m.room.mode === 'zombies') {
+        const name = encodeURIComponent(m.you.name || $('name-input').value || 'Hunter');
+        location.href = 'zombies.html?code=' + m.room.code + '&name=' + name;
+        return;
+      }
       me = m.you;
       roomCode = m.room.code;
       isHost = !!m.room.isHost;

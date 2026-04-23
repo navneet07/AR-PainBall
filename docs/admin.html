@@ -168,7 +168,14 @@
       padding: 12px 22px; font-family: inherit; font-size: 12px; letter-spacing: 0.2em;
       text-transform: uppercase; cursor: pointer; border-radius: 3px;
       box-shadow: 0 0 12px rgba(105,240,174,0.25);">
-      ＋ CREATE NEW ROOM
+      ＋ PVP ROOM
+    </button>
+    <button id="create-zombies-btn" style="
+      background: transparent; color: #6dff7e; border: 1px solid #6dff7e;
+      padding: 12px 22px; font-family: inherit; font-size: 12px; letter-spacing: 0.2em;
+      text-transform: uppercase; cursor: pointer; border-radius: 3px;
+      box-shadow: 0 0 12px rgba(109,255,126,0.4);">
+      🧟 ZOMBIES ROOM
     </button>
     <div id="active-rooms-list" style="display:flex;gap:10px;flex-wrap:wrap;flex:1;"></div>
     <div id="create-status" style="font-size:10px;color:var(--ink-dim);letter-spacing:0.14em;"></div>
@@ -308,7 +315,16 @@ document.getElementById('create-room-btn').addEventListener('click', () => {
     return;
   }
   ws.send(JSON.stringify({ type: 'admin_create_room' }));
-  document.getElementById('create-status').textContent = 'Creating room…';
+  document.getElementById('create-status').textContent = 'Creating PvP room…';
+});
+
+document.getElementById('create-zombies-btn').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) {
+    document.getElementById('create-status').textContent = '⚠ Not connected — wait…';
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'admin_create_zombies_room' }));
+  document.getElementById('create-status').textContent = 'Creating ZOMBIES room…';
 });
 
 function flashNewRoom(code) {
@@ -333,16 +349,61 @@ function renderActiveRooms() {
   const rooms = (metrics && metrics.rooms) || [];
   const el = document.getElementById('active-rooms-list');
   if (!rooms.length) { el.innerHTML = '<span style="color:var(--ink-dim);font-size:10px;letter-spacing:0.14em;">No active rooms</span>'; return; }
-  el.innerHTML = rooms.map(r => `
-    <div class="room-chip">
-      <span class="code">${r.code}</span>
-      <span class="phase ${r.phase}">${r.phase.toUpperCase()}</span>
-      <span class="meta">${r.playerCount}p · ${r.spectatorCount}s</span>
-      <button class="copy-btn" onclick="copyCode('${r.code}')">COPY</button>
-      <button onclick="closeRoom('${r.code}')">× END</button>
-    </div>
-  `).join('');
+  el.innerHTML = rooms.map(r => {
+    const isZ = r.mode === 'zombies';
+    const modePill = isZ
+      ? '<span style="font-size:9px;letter-spacing:0.18em;color:#6dff7e;border:1px solid #6dff7e;padding:2px 6px;border-radius:2px;">ZOMBIES</span>'
+      : '<span style="font-size:9px;letter-spacing:0.18em;color:var(--cyan);border:1px solid var(--cyan);padding:2px 6px;border-radius:2px;">PVP</span>';
+    const startBtn = (isZ && r.phase === 'lobby' && r.playerCount > 0)
+      ? `<button style="border-color:#6dff7e;color:#6dff7e;" onclick="startZombiesRound('${r.code}')">▶ START ROUND</button>`
+      : '';
+    const leaderboard = (isZ && r.zombiesPlayers && r.zombiesPlayers.length)
+      ? renderZombiesLeaderboard(r.zombiesPlayers)
+      : '';
+    return `
+      <div class="room-chip" style="flex-direction:column;align-items:flex-start;gap:6px;${isZ ? 'border-color:#6dff7e;background:rgba(109,255,126,0.06);' : ''}">
+        <div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">
+          <span class="code" style="${isZ ? 'color:#6dff7e;' : ''}">${r.code}</span>
+          ${modePill}
+          <span class="phase ${r.phase}">${r.phase.toUpperCase()}</span>
+          <span class="meta">${r.playerCount}p · ${r.spectatorCount}s</span>
+          <button class="copy-btn" onclick="copyCode('${r.code}')">COPY</button>
+          ${startBtn}
+          <button onclick="closeRoom('${r.code}')">× END</button>
+        </div>
+        ${leaderboard}
+      </div>
+    `;
+  }).join('');
 }
+
+function renderZombiesLeaderboard(players) {
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  const maxScore = Math.max(1, ...sorted.map(p => p.score));
+  return `
+    <div style="width:100%;display:flex;flex-direction:column;gap:3px;font-size:11px;padding-top:4px;border-top:1px dashed rgba(109,255,126,0.25);">
+      ${sorted.map((p, i) => `
+        <div style="display:flex;align-items:center;gap:8px;${!p.alive ? 'opacity:0.45;' : ''}">
+          <span style="color:#ffd166;width:18px;text-align:right;">${i + 1}.</span>
+          <span style="color:#fff;flex:0 0 80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.name)}</span>
+          <span style="font-variant-numeric:tabular-nums;color:#5cf6ff;width:50px;text-align:right;">${p.score}</span>
+          <span style="font-size:9px;color:#8b86b3;width:48px;">W${p.wave}</span>
+          <span style="font-size:9px;color:#ff3040;">${p.alive ? '❤'.repeat(p.lives) : 'DEAD'}</span>
+          <div style="flex:1;height:6px;background:rgba(109,255,126,0.1);border:1px solid rgba(109,255,126,0.3);position:relative;overflow:hidden;">
+            <div style="position:absolute;inset:0;width:${(p.score/maxScore)*100}%;background:linear-gradient(to right,#6dff7e,#ffd166);box-shadow:0 0 4px #6dff7e;"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function startZombiesRound(code) {
+  if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'admin_zombies_start', code }));
+  document.getElementById('create-status').textContent = `Starting round in ${code}…`;
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ───── renderers ─────
 function render() {

@@ -38,10 +38,11 @@ function genCode() {
   throw new Error('room-code exhaustion');
 }
 
-function createRoom() {
+function createRoom(mode = 'pvp') {
   const room = {
     code: genCode(),
-    state: newState(),
+    mode,                                  // 'pvp' | 'zombies'
+    state: mode === 'zombies' ? newZombiesState() : newState(),
     spectators: new Set(),
     createdAt: Date.now(),
     lastActiveAt: Date.now(),
@@ -52,12 +53,26 @@ function createRoom() {
   return room;
 }
 
+// Zombies room state (separate from PvP game.mjs state)
+function newZombiesState() {
+  return {
+    phase: 'lobby',     // lobby | countdown | playing | ended
+    startsAt: null,     // ms epoch when wave 1 begins
+    players: new Map(), // playerId → { id, ws, name, score, wave, lives, alive, ready }
+    rankings: null,
+  };
+}
+
+function zombiesPlayerCount(room) {
+  return room.state.players.size;
+}
+
 function maybeGCRoom(room) {
   if (!room) return;
-  if (room.state.players.size > 0 || room.spectators.size > 0) return;
+  if (zombiesPlayerCount(room) > 0 || room.spectators.size > 0) return;
   // grace period before removal
   setTimeout(() => {
-    if (room.state.players.size === 0 && room.spectators.size === 0) {
+    if (zombiesPlayerCount(room) === 0 && room.spectators.size === 0) {
       clearTimeout(room.matchTimer);
       ROOMS.delete(room.code);
       recordEvent('info', 'room', `room ${room.code} removed · empty`);
@@ -69,7 +84,7 @@ function maybeGCRoom(room) {
 setInterval(() => {
   const cutoff = Date.now() - ROOM_IDLE_TTL_MS;
   for (const [code, room] of ROOMS) {
-    if (room.lastActiveAt < cutoff && room.state.players.size === 0) {
+    if (room.lastActiveAt < cutoff && zombiesPlayerCount(room) === 0) {
       clearTimeout(room.matchTimer);
       ROOMS.delete(code);
       recordEvent('info', 'room', `room ${code} removed · idle`);
@@ -123,10 +138,17 @@ function publicMetrics() {
     events: METRICS.events.slice(-30),
     rooms: [...ROOMS.values()].map(r => ({
       code: r.code,
+      mode: r.mode || 'pvp',
       phase: r.state.phase,
+      startsAt: r.state.startsAt || null,
       playerCount: r.state.players.size,
       spectatorCount: r.spectators.size,
       createdAt: r.createdAt,
+      // For zombies rooms: include the live leaderboard
+      zombiesPlayers: (r.mode === 'zombies') ? [...r.state.players.values()].map(p => ({
+        id: p.id, name: p.name, score: p.score, wave: p.wave, lives: p.lives,
+        alive: p.alive, ready: p.ready,
+      })) : undefined,
     })),
   };
 }
@@ -243,10 +265,37 @@ wss.on('connection', (ws, req) => {
         let msg;
         try { msg = JSON.parse(raw.toString()); } catch { return; }
         if (msg.type === 'admin_create_room') {
-          const r = createRoom();
-          recordEvent('info', 'room', `admin spawned room ${r.code}`);
-          logGameEvent(r, 'admin_created', { remote });
-          send(ws, { type: 'admin_room_created', code: r.code });
+          const r = createRoom('pvp');
+          recordEvent('info', 'room', `admin spawned PvP room ${r.code}`);
+          logGameEvent(r, 'admin_created', { remote, mode: 'pvp' });
+          send(ws, { type: 'admin_room_created', code: r.code, mode: 'pvp' });
+        } else if (msg.type === 'admin_create_zombies_room') {
+          const r = createRoom('zombies');
+          recordEvent('info', 'room', `admin spawned ZOMBIES room ${r.code}`);
+          logGameEvent(r, 'admin_created', { remote, mode: 'zombies' });
+          send(ws, { type: 'admin_room_created', code: r.code, mode: 'zombies' });
+        } else if (msg.type === 'admin_zombies_start' && msg.code && ROOMS.has(msg.code)) {
+          const r = ROOMS.get(msg.code);
+          if (r.mode !== 'zombies') return;
+          if (zombiesPlayerCount(r) === 0) return;
+          const startsAt = Date.now() + 3500;   // 3.5s countdown
+          r.state.phase = 'countdown';
+          r.state.startsAt = startsAt;
+          r.state.rankings = null;
+          // reset all players' score state for new round
+          for (const p of r.state.players.values()) {
+            p.score = 0; p.wave = 0; p.lives = 3; p.alive = true;
+          }
+          broadcastRoom(r, { type: 'zombies_match_start', startsAt });
+          recordEvent('info', 'room', `admin started ZOMBIES round in ${r.code} (${zombiesPlayerCount(r)} players)`);
+          // Flip to playing after countdown
+          clearTimeout(r.matchTimer);
+          r.matchTimer = setTimeout(() => {
+            if (r.state.phase === 'countdown') {
+              r.state.phase = 'playing';
+              publishZombiesState(r);
+            }
+          }, 3500);
         } else if (msg.type === 'admin_close_room' && msg.code && ROOMS.has(msg.code)) {
           const r = ROOMS.get(msg.code);
           // Kick all players (they'll see socket close)
@@ -304,6 +353,28 @@ wss.on('connection', (ws, req) => {
         if (!msg.name) return replyErr('Name required');
         const target = ROOMS.get(String(msg.code));
         if (!target) return replyErr('Room not found');
+
+        // ─── ZOMBIES room — different player model ──────────
+        if (target.mode === 'zombies') {
+          if (target.state.phase === 'playing') {
+            return replyErr('Round in progress — wait for the next one');
+          }
+          const player = zombiesAddPlayer(target, ws, msg.name);
+          if (!player) return replyErr('Could not join zombies room');
+          room = target;
+          playerId = player.id;
+          recordEvent('join', 'player', `${player.name} joined ZOMBIES room ${room.code}`);
+          logGameEvent(room, 'player_join', { playerId, name: player.name, mode: 'zombies' });
+          send(ws, {
+            type: 'room_joined',
+            room: { code: room.code, isHost: false, mode: 'zombies' },
+            you: { id: player.id, name: player.name },
+          });
+          publishZombiesState(room);
+          break;
+        }
+
+        // ─── PvP room (existing behavior) ───────────────────
         if (target.state.phase === 'playing' || target.state.phase === 'ending') {
           return replyErr('Match in progress — wait for the next round');
         }
@@ -315,10 +386,43 @@ wss.on('connection', (ws, req) => {
         logGameEvent(room, 'player_join', { playerId, name: player.name, role: 'guest' });
         send(ws, {
           type: 'room_joined',
-          room: { code: room.code, isHost: false },
+          room: { code: room.code, isHost: false, mode: 'pvp' },
           you: publicPlayer(player),
         });
         publishLobby(room);
+        break;
+      }
+
+      // ─── ZOMBIES per-player events ─────────────────────────
+      case 'zombies_score': {
+        if (!room || room.mode !== 'zombies' || !playerId) return;
+        const p = room.state.players.get(playerId);
+        if (!p) return;
+        p.score = Number(msg.score) || 0;
+        p.wave  = Number(msg.wave)  || 0;
+        p.lives = Number(msg.lives) || 0;
+        publishZombiesState(room);
+        break;
+      }
+      case 'zombies_died': {
+        if (!room || room.mode !== 'zombies' || !playerId) return;
+        const p = room.state.players.get(playerId);
+        if (!p) return;
+        p.alive = false;
+        p.score = Number(msg.score) || p.score;
+        p.wave  = Number(msg.wave)  || p.wave;
+        recordEvent('info', 'zombies', `${p.name} died · ${p.score} pts · wave ${p.wave}`);
+        logGameEvent(room, 'zombies_died', { playerId, name: p.name, score: p.score, wave: p.wave });
+        publishZombiesState(room);
+        // If all dead, close round
+        if ([...room.state.players.values()].every(pl => !pl.alive)) {
+          room.state.phase = 'ended';
+          room.state.rankings = [...room.state.players.values()]
+            .sort((a, b) => b.score - a.score)
+            .map((pl, i) => ({ rank: i + 1, name: pl.name, score: pl.score, wave: pl.wave }));
+          broadcastRoom(room, { type: 'zombies_match_ended', rankings: room.state.rankings });
+          recordEvent('win', 'zombies', `[${room.code}] round ended · winner ${room.state.rankings[0]?.name}`);
+        }
         break;
       }
 
@@ -396,9 +500,14 @@ wss.on('connection', (ws, req) => {
 
       case 'leave': {
         if (room && playerId) {
-          removePlayer(room.state, playerId);
+          if (room.mode === 'zombies') {
+            zombiesRemovePlayer(room, playerId);
+            publishZombiesState(room);
+          } else {
+            removePlayer(room.state, playerId);
+            publishLobby(room);
+          }
           logGameEvent(room, 'player_leave', { playerId, reason: 'explicit' });
-          publishLobby(room);
           maybeGCRoom(room);
           playerId = null;
           room = null;
@@ -420,12 +529,55 @@ wss.on('connection', (ws, req) => {
       const who = p?.name || remote;
       recordEvent('warn', 'player', `disconnect: ${who} left room ${room.code}`);
       logGameEvent(room, 'player_leave', { playerId, reason: 'disconnect' });
-      removePlayer(room.state, playerId);
-      publishLobby(room);
+      if (room.mode === 'zombies') {
+        zombiesRemovePlayer(room, playerId);
+        publishZombiesState(room);
+      } else {
+        removePlayer(room.state, playerId);
+        publishLobby(room);
+      }
       maybeGCRoom(room);
     }
   });
 });
+
+// ─── ZOMBIES helpers ───────────────────────────────────────
+function zombiesAddPlayer(room, ws, name) {
+  // Reuse a simple id generator
+  const id = 'z_' + Math.random().toString(36).slice(2, 10);
+  const trimmed = String(name || '').slice(0, 16) || 'Hunter';
+  const player = {
+    id, ws, name: trimmed,
+    score: 0, wave: 0, lives: 3, alive: true, ready: false,
+  };
+  room.state.players.set(id, player);
+  room.lastActiveAt = Date.now();
+  return player;
+}
+
+function zombiesRemovePlayer(room, playerId) {
+  room.state.players.delete(playerId);
+  room.lastActiveAt = Date.now();
+  // If round was running and only player left, end it
+  if (room.state.phase === 'playing' && room.state.players.size === 0) {
+    room.state.phase = 'ended';
+  }
+}
+
+function publishZombiesState(room) {
+  const players = [...room.state.players.values()].map(p => ({
+    id: p.id, name: p.name, score: p.score, wave: p.wave,
+    lives: p.lives, alive: p.alive, ready: p.ready,
+  }));
+  broadcastRoom(room, {
+    type: 'zombies_state',
+    code: room.code,
+    phase: room.state.phase,
+    startsAt: room.state.startsAt,
+    players,
+    rankings: room.state.rankings || null,
+  });
+}
 
 function kickoffCountdown(room) {
   startCountdown(room.state);

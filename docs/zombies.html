@@ -376,9 +376,32 @@ const $ = (id) => document.getElementById(id);
 window.gpz.onCamReady = () => maybeReadyToStart();
 window.gpz.onMotionReady = () => maybeReadyToStart();
 
+// Multiplayer mode: triggered by ?code=XXXXXX in URL
+const _params = new URLSearchParams(location.search);
+const mpRoomCode = _params.get('code');
+const mpPlayerName = _params.get('name') || 'Hunter';
+const isMultiplayer = !!mpRoomCode;
+
+let mpWs = null;
+let mpPlayers = [];           // live leaderboard from server
+let mpMyId = null;             // server-assigned player id
+let mpStartsAt = null;        // ms epoch when wave 1 begins
+let mpRankings = null;
+let lastScoreSentAt = 0;
+
 let modelReady = false;
 let game = null;
 let bestScore = Number(localStorage.getItem('gp-zombies-best') || 0);
+
+// Tweak start screen for multiplayer: hide BEGIN HUNT, show waiting state
+if (isMultiplayer) {
+  $('start-btn').style.display = 'none';
+  document.querySelector('#start-overlay h1').textContent = 'ZOMBIES · ROOM ' + mpRoomCode;
+  document.querySelector('#start-overlay p').textContent = `Multiplayer room — waiting for the host to start the round. Enable camera + motion below.`;
+  // Hide solo restart button on end overlay (host controls flow)
+  $('restart-btn').textContent = 'BACK TO LOBBY';
+  $('restart-btn').onclick = () => { location.href = './'; };
+}
 
 // Three.js scene
 let renderer, scene, camera3d, raycaster;
@@ -784,9 +807,177 @@ function flashDamage() {
 
 function haptic(p) { if (navigator.vibrate) navigator.vibrate(p); }
 
+// ─── MULTIPLAYER: connect to server, sync round, broadcast scores ──
+async function connectMultiplayer() {
+  try {
+    const r = await fetch('current-url.txt?t=' + Date.now(), { cache: 'no-store' });
+    const origin = (await r.text()).trim();
+    if (!origin.startsWith('http')) throw new Error('bad bootstrap URL');
+    const wsUrl = origin.replace(/^http/, 'ws') + '/ws?role=player';
+    mpWs = new WebSocket(wsUrl);
+    mpWs.onopen = () => {
+      mpWs.send(JSON.stringify({ type: 'join_room', code: mpRoomCode, name: mpPlayerName }));
+    };
+    mpWs.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'room_joined' && m.you) mpMyId = m.you.id;
+      if (m.type === 'zombies_state') {
+        mpPlayers = m.players || [];
+        mpStartsAt = m.startsAt;
+        renderLeaderboardWidget();
+        // Show countdown on start screen if we're in lobby
+        if (m.phase === 'lobby' && !game) updateMpStartLabel();
+      }
+      if (m.type === 'zombies_match_start') {
+        mpStartsAt = m.startsAt;
+        beginCountdownToServerStart();
+      }
+      if (m.type === 'zombies_match_ended') {
+        mpRankings = m.rankings;
+        showMpRankings();
+      }
+      if (m.type === 'error') window.__showError('SERVER', m.error);
+    };
+    mpWs.onerror = () => window.__showError('WS', 'WebSocket error');
+    mpWs.onclose = () => {
+      // Reconnect once if disconnected mid-session
+      if (game && !game.over) setTimeout(connectMultiplayer, 2000);
+    };
+  } catch (e) {
+    window.__showError('MP', 'Connect failed: ' + (e.message || e));
+  }
+}
+
+function updateMpStartLabel() {
+  const aliveCount = mpPlayers.filter(p => p.alive !== false).length;
+  $('loader-text').textContent = `✓ Joined room ${mpRoomCode} as ${mpPlayerName} · ${aliveCount} player${aliveCount===1?'':'s'} waiting`;
+}
+
+function beginCountdownToServerStart() {
+  // Hide start overlay, show countdown
+  $('start-overlay').style.display = 'none';
+  $('hud').style.display = 'flex';
+  $('compass-strip').style.display = 'block';
+  $('reticle').style.display = 'block';
+  $('fire-btn').style.display = 'block';
+  // Big banner with seconds-to-go, then call startGame() exactly at startsAt
+  const tick = () => {
+    const left = mpStartsAt - Date.now();
+    if (left <= 0) {
+      startGame();
+      // After startGame(), mark game.startTime to mpStartsAt for sync (already starts now)
+      return;
+    }
+    const sec = Math.ceil(left / 1000);
+    let banner = document.getElementById('mp-countdown');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'mp-countdown';
+      banner.className = 'wave-banner';
+      banner.style.animation = 'none';
+      banner.style.opacity = '1';
+      document.body.appendChild(banner);
+    }
+    banner.textContent = sec;
+    requestAnimationFrame(tick);
+  };
+  tick();
+  setTimeout(() => { const b = document.getElementById('mp-countdown'); if (b) b.remove(); }, 4000);
+}
+
+// Periodically push our score to the server
+function maybeBroadcastScore() {
+  if (!isMultiplayer || !mpWs || mpWs.readyState !== 1 || !game || game.over) return;
+  const now = Date.now();
+  if (now - lastScoreSentAt < 2000) return;
+  lastScoreSentAt = now;
+  mpWs.send(JSON.stringify({
+    type: 'zombies_score',
+    score: game.score, wave: game.wave, lives: game.lives,
+  }));
+}
+// Tick every 2s
+setInterval(maybeBroadcastScore, 2000);
+
+// On player death, send to server
+const _origEndGame = endGame;
+endGame = function () {
+  if (isMultiplayer && mpWs && mpWs.readyState === 1 && game) {
+    mpWs.send(JSON.stringify({
+      type: 'zombies_died',
+      score: game.score, wave: game.wave,
+    }));
+  }
+  _origEndGame();
+};
+
+// ─── LEADERBOARD WIDGET ─────────────────────────────────
+let leaderboardEl = null;
+function renderLeaderboardWidget() {
+  if (!isMultiplayer) return;
+  if (!leaderboardEl) {
+    leaderboardEl = document.createElement('div');
+    leaderboardEl.id = 'mp-leaderboard';
+    leaderboardEl.style.cssText = `
+      position: fixed; top: 80px; left: 8px; z-index: 11;
+      background: rgba(10,6,18,0.85); border: 1px solid #6dff7e;
+      border-radius: 3px; padding: 8px 10px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 10px;
+      color: #fff; min-width: 160px; max-width: 220px;
+      box-shadow: 0 0 12px rgba(109,255,126,0.3);
+    `;
+    document.body.appendChild(leaderboardEl);
+  }
+  const sorted = [...mpPlayers].sort((a, b) => b.score - a.score);
+  leaderboardEl.innerHTML = `
+    <div style="font-size:9px;color:#6dff7e;letter-spacing:0.18em;margin-bottom:4px;">ROOM ${mpRoomCode}</div>
+    ${sorted.map((p, i) => `
+      <div style="display:flex;justify-content:space-between;gap:6px;padding:2px 0;${!p.alive ? 'opacity:0.4;' : ''}${p.id === mpMyId ? 'color:#5cf6ff;font-weight:700;' : ''}">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i+1}. ${escapeHtml(p.name)}</span>
+        <span style="color:#ffd166;font-variant-numeric:tabular-nums;">${p.score}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+function showMpRankings() {
+  $('hud').style.display = 'none';
+  $('compass-strip').style.display = 'none';
+  $('reticle').style.display = 'none';
+  $('fire-btn').style.display = 'none';
+  if (leaderboardEl) leaderboardEl.remove();
+  // Reuse end-overlay but show server rankings
+  $('end-title').textContent = 'ROUND OVER';
+  const r = mpRankings || [];
+  $('end-score').textContent = r.find(x => x.name === mpPlayerName)?.score ?? game?.score ?? 0;
+  $('end-wave').textContent  = r.find(x => x.name === mpPlayerName)?.wave ?? game?.wave ?? 0;
+  $('end-best').textContent  = r[0] ? `${r[0].name} · ${r[0].score}` : '—';
+  // Replace the stat list with full rankings
+  const card = document.querySelector('#end-overlay .card');
+  // Insert rankings list once
+  let rankList = document.getElementById('mp-rank-list');
+  if (!rankList) {
+    rankList = document.createElement('div');
+    rankList.id = 'mp-rank-list';
+    rankList.style.cssText = 'margin-top:10px;font-size:11px;';
+    card.insertBefore(rankList, card.querySelector('button'));
+  }
+  rankList.innerHTML = '<div style="color:#c8a6ff;letter-spacing:0.2em;font-size:10px;margin:8px 0 6px;">FINAL RANKINGS</div>' +
+    r.map((x, i) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(109,255,126,0.15);${x.name === mpPlayerName ? 'color:#5cf6ff;' : ''}">
+      <span>${i+1}. ${escapeHtml(x.name)}</span>
+      <span style="color:#ffd166;">${x.score} pts · W${x.wave}</span>
+    </div>`).join('');
+  $('end-overlay').style.display = 'flex';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 // Boot — kick off Three.js init right away (the GLB load can run while the
 // user fills in camera + motion permissions in parallel).
 initThree();
+if (isMultiplayer) connectMultiplayer();
 </script>
 </body>
 </html>
