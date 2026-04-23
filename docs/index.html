@@ -395,19 +395,20 @@ function toast(msg, kind='info', ms=3500) {
 
 // ─── URL bootstrap ────────────────────────────────────────
 async function resolveServerOrigin() {
-  // If the page is served from the tunnel itself (e.g. fake-client.html),
-  // prefer same-origin. Else, fetch bootstrap.
   if (location.hostname.endsWith('.trycloudflare.com') ||
       location.hostname.endsWith('.cloudspaces.litng.ai')) {
     return location.protocol + '//' + location.host;
   }
+  // cache-bust to dodge iOS Safari + GitHub raw CDN staleness
+  const url = BOOTSTRAP_URL + '?t=' + Date.now();
   try {
-    const resp = await fetch(BOOTSTRAP_URL, { cache: 'no-store' });
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const txt = (await resp.text()).trim();
-    if (!txt.startsWith('http')) throw new Error('bad URL in bootstrap');
+    if (!txt.startsWith('http')) throw new Error('bad URL: ' + txt.slice(0, 40));
     return txt;
   } catch (e) {
-    throw new Error('Cannot fetch bootstrap URL: ' + e.message);
+    throw new Error('Bootstrap fetch failed: ' + e.message);
   }
 }
 
@@ -420,14 +421,15 @@ async function connect() {
       wsOrigin = await resolveServerOrigin();
     }
     const wsUrl = wsOrigin.replace(/^http/, 'ws') + '/ws?role=player';
-    toast('Connecting…');
+    toast('Connecting to ' + wsOrigin.replace(/^https?:\/\//, '').slice(0, 40) + '…', 'info', 4000);
     ws = new WebSocket(wsUrl);
     ws.onopen = () => { $('conn').textContent = 'LIVE'; $('conn').className = 'conn ok'; toast('Connected', 'info', 1000); };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       $('conn').textContent = 'OFFLINE'; $('conn').className = 'conn bad';
-      setTimeout(() => { wsOrigin = null; connect(); }, 1500);  // re-resolve in case of rotation
+      toast('Socket closed (code ' + ev.code + ') — retrying…', 'err', 3000);
+      setTimeout(() => { wsOrigin = null; connect(); }, 3000);  // re-resolve in case of rotation
     };
-    ws.onerror = () => toast('Socket error — retrying', 'err', 2000);
+    ws.onerror = (ev) => toast('Socket error on ' + wsOrigin, 'err', 5000);
     ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
   } catch (e) {
     toast(e.message, 'err', 5000);
