@@ -1,41 +1,143 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#1a1438"/>
+    <!-- Background gradient -->
+    <radialGradient id="bg" cx="45%" cy="35%" r="75%">
+      <stop offset="0%"  stop-color="#2a1f5c"/>
+      <stop offset="55%" stop-color="#15102a"/>
       <stop offset="100%" stop-color="#0a0612"/>
     </radialGradient>
-    <linearGradient id="stroke" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#5cf6ff"/>
-      <stop offset="100%" stop-color="#c8a6ff"/>
+
+    <!-- Cyan eye-glow gradient -->
+    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff"/>
+      <stop offset="25%" stop-color="#5cf6ff"/>
+      <stop offset="100%" stop-color="#5cf6ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Laser beam (thick cyan with white core) -->
+    <linearGradient id="beam" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#ffffff"/>
+      <stop offset="15%" stop-color="#5cf6ff"/>
+      <stop offset="80%" stop-color="#5cf6ff"/>
+      <stop offset="100%" stop-color="#5cf6ff" stop-opacity="0"/>
     </linearGradient>
+
+    <!-- Hood + body dark gradient (amethyst shadow) -->
+    <linearGradient id="hood" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#5a3fa0"/>
+      <stop offset="100%" stop-color="#2e1f5c"/>
+    </linearGradient>
+    <linearGradient id="hoodLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#c8a6ff"/>
+      <stop offset="100%" stop-color="#8662d8"/>
+    </linearGradient>
+
+    <!-- Glow filter -->
     <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feGaussianBlur stdDeviation="8" result="b"/>
       <feMerge>
-        <feMergeNode in="blur"/>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="intenseGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="20" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
   </defs>
 
+  <!-- App icon mask (iOS auto-rounds, but we add ours for other platforms) -->
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
 
-  <!-- reticle ring -->
-  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#stroke)" stroke-width="8" opacity="0.85" filter="url(#glow)"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#5cf6ff" stroke-width="2" opacity="0.9"/>
+  <!-- Background paint splats (behind character) -->
+  <g opacity="0.35" filter="url(#glow)">
+    <circle cx="90"  cy="120" r="38" fill="#c8a6ff"/>
+    <circle cx="60"  cy="90"  r="16" fill="#c8a6ff"/>
+    <circle cx="420" cy="420" r="32" fill="#ff3040"/>
+    <circle cx="450" cy="400" r="12" fill="#ff3040"/>
+    <circle cx="440" cy="455" r="8"  fill="#ff3040"/>
+    <circle cx="380" cy="100" r="24" fill="#ffd166"/>
+  </g>
 
-  <!-- crosshair -->
-  <line x1="256" y1="80"  x2="256" y2="170" stroke="#5cf6ff" stroke-width="6" stroke-linecap="round" filter="url(#glow)"/>
-  <line x1="256" y1="342" x2="256" y2="432" stroke="#5cf6ff" stroke-width="6" stroke-linecap="round" filter="url(#glow)"/>
-  <line x1="80"  y1="256" x2="170" y2="256" stroke="#5cf6ff" stroke-width="6" stroke-linecap="round" filter="url(#glow)"/>
-  <line x1="342" y1="256" x2="432" y2="256" stroke="#5cf6ff" stroke-width="6" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- ─── GHOST CHARACTER ─── -->
+  <!-- Hood silhouette (teardrop shape) -->
+  <g transform="translate(256,260)">
+    <!-- Body/robe below hood -->
+    <path d="M -130 50
+             C -135 100, -125 160, -80 180
+             L 80 180
+             C 125 160, 135 100, 130 50
+             Z"
+          fill="url(#hood)" stroke="#c8a6ff" stroke-width="4" opacity="0.95"/>
 
-  <!-- center dot -->
-  <circle cx="256" cy="256" r="10" fill="#ff3040" filter="url(#glow)"/>
+    <!-- Hood main shape (rounded teardrop pointing up) -->
+    <path d="M -120 50
+             C -135 -40, -90 -120, 0 -130
+             C 90 -120, 135 -40, 120 50
+             C 110 60, 80 70, 0 70
+             C -80 70, -110 60, -120 50 Z"
+          fill="url(#hood)" stroke="#c8a6ff" stroke-width="5" stroke-linejoin="round"/>
 
-  <!-- paint splat accent, bottom-right -->
-  <g transform="translate(360,360)" opacity="0.9">
-    <circle cx="0" cy="0" r="22" fill="#c8a6ff" filter="url(#glow)"/>
-    <circle cx="-24" cy="10" r="9" fill="#c8a6ff"/>
-    <circle cx="18" cy="-18" r="7" fill="#c8a6ff"/>
+    <!-- Hood inner shadow (gives depth) -->
+    <path d="M -90 40
+             C -100 -20, -70 -90, 0 -100
+             C 70 -90, 100 -20, 90 40
+             C 80 48, 50 58, 0 58
+             C -50 58, -80 48, -90 40 Z"
+          fill="#0a0612" opacity="0.55"/>
+
+    <!-- Hood highlight (light from upper-left) -->
+    <path d="M -105 -10
+             C -115 -55, -70 -115, -20 -125
+             C -45 -110, -80 -70, -95 -20 Z"
+          fill="url(#hoodLight)" opacity="0.45"/>
+
+    <!-- Face plate (dark void inside hood) -->
+    <ellipse cx="0" cy="-10" rx="62" ry="46" fill="#0a0612"/>
+
+    <!-- Single glowing cyan eye -->
+    <circle cx="12" cy="-18" r="40" fill="url(#eyeGlow)" filter="url(#intenseGlow)"/>
+    <circle cx="12" cy="-18" r="14" fill="#ffffff"/>
+    <circle cx="14" cy="-20" r="6"  fill="#5cf6ff"/>
+  </g>
+
+  <!-- ─── CYAN LASER BEAM ─── -->
+  <!-- Outer soft glow -->
+  <g filter="url(#intenseGlow)" opacity="0.9">
+    <rect x="268" y="232" width="260" height="28" rx="14"
+          fill="url(#beam)" transform="rotate(18 268 246)"/>
+  </g>
+  <!-- Core beam -->
+  <rect x="268" y="238" width="240" height="12" rx="6"
+        fill="url(#beam)" transform="rotate(18 268 244)"
+        filter="url(#glow)"/>
+  <!-- Inner bright line -->
+  <rect x="272" y="242" width="230" height="4"
+        fill="#ffffff" transform="rotate(18 272 244)"
+        opacity="0.95"/>
+
+  <!-- Laser impact splat at end of beam -->
+  <g transform="translate(480,320)" filter="url(#glow)">
+    <circle cx="0" cy="0" r="14" fill="#5cf6ff" opacity="0.85"/>
+    <circle cx="-14" cy="-8" r="5" fill="#5cf6ff" opacity="0.7"/>
+    <circle cx="10" cy="12" r="4"  fill="#5cf6ff" opacity="0.6"/>
+    <circle cx="16" cy="-10" r="3" fill="#5cf6ff" opacity="0.5"/>
+  </g>
+
+  <!-- Foreground paint drip, bottom-right corner -->
+  <g transform="translate(412,120)" opacity="0.9" filter="url(#glow)">
+    <circle cx="0" cy="0" r="18" fill="#ff3040"/>
+    <circle cx="-18" cy="10" r="7" fill="#ff3040"/>
+    <circle cx="14" cy="-14" r="5" fill="#ff3040"/>
   </g>
 </svg>
