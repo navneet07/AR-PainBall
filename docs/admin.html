@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GhostPaint · Manager</title>
+<style>
+  :root {
+    --cyan: #5cf6ff; --cyan-dim: rgba(92,246,255,0.5);
+    --amethyst: #c8a6ff; --blood: #ff3040; --gold: #ffd166;
+    --green: #69f0ae; --orange: #ff7030;
+    --bg-0: #05020e; --bg-1: #0f0a22; --bg-2: #1a1438;
+    --ink: #e9e3ff; --ink-dim: #8b86b3;
+    --glow: 0 0 14px rgba(92,246,255,0.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    min-height: 100vh; }
+  body { display: grid; grid-template-rows: auto 1fr;
+    background: radial-gradient(circle at 30% -10%, #1a1438 0%, var(--bg-0) 60%); }
+
+  /* ─── Header ─── */
+  header {
+    padding: 14px 24px; border-bottom: 1px solid rgba(92,246,255,0.2);
+    display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 24px;
+    align-items: center; background: rgba(10,6,18,0.7); backdrop-filter: blur(8px);
+  }
+  .brand { color: var(--amethyst); letter-spacing: 0.24em; font-size: 14px; }
+  .title { color: var(--cyan); letter-spacing: 0.18em; font-size: 12px; text-shadow: var(--glow); }
+  .kpi { text-align: right; }
+  .kpi .label { color: var(--ink-dim); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .kpi .value { color: var(--cyan); font-size: 18px; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .kpi.warn .value { color: var(--gold); }
+  .kpi.bad .value { color: var(--blood); }
+  .kpi.good .value { color: var(--green); }
+  .phase-pill { padding: 6px 12px; border: 1px solid var(--cyan); color: var(--cyan);
+    border-radius: 3px; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    box-shadow: var(--glow); }
+  .phase-pill.playing { color: var(--green); border-color: var(--green); box-shadow: 0 0 14px rgba(105,240,174,0.4); }
+  .phase-pill.countdown { color: var(--gold); border-color: var(--gold); }
+  .phase-pill.ended { color: var(--blood); border-color: var(--blood); }
+
+  /* ─── 3-zone grid ─── */
+  main {
+    padding: 18px 20px; display: grid; gap: 14px;
+    grid-template-columns: 1.2fr 1fr; grid-template-rows: auto auto;
+    grid-template-areas:
+      "scoreboard insights"
+      "events     health";
+    max-width: 1600px; width: 100%; margin: 0 auto;
+  }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; grid-template-areas: "scoreboard" "insights" "events" "health"; } }
+
+  .zone-scoreboard { grid-area: scoreboard; }
+  .zone-insights { grid-area: insights; }
+  .zone-events { grid-area: events; }
+  .zone-health { grid-area: health; }
+
+  /* ─── Panel + brackets ─── */
+  .panel { position: relative; background: rgba(15,10,34,0.6); border: 1px solid rgba(92,246,255,0.2);
+    padding: 16px; border-radius: 4px; backdrop-filter: blur(4px); }
+  .panel::before, .panel::after, .panel .cb, .panel .cbr {
+    content: ""; position: absolute; width: 14px; height: 14px;
+    box-shadow: var(--glow);
+  }
+  .panel::before { top: -1px; left: -1px; border-top: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
+  .panel::after  { top: -1px; right: -1px; border-top: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
+  .panel .cb  { bottom: -1px; left: -1px; border-bottom: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
+  .panel .cbr { bottom: -1px; right: -1px; border-bottom: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
+
+  h2 { color: var(--cyan); font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase;
+    margin: 0 0 12px; font-weight: 500; }
+  h2 .sub { color: var(--ink-dim); font-size: 9px; margin-left: 10px; letter-spacing: 0.14em; }
+
+  /* ─── Scoreboard ─── */
+  table.scoreboard { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .scoreboard th { text-align: left; color: var(--amethyst); font-weight: 500;
+    padding: 5px 6px; border-bottom: 1px solid rgba(92,246,255,0.15);
+    font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; }
+  .scoreboard td { padding: 10px 6px; border-bottom: 1px solid rgba(92,246,255,0.08); vertical-align: middle; }
+  .scoreboard tr:hover { background: rgba(92,246,255,0.04); }
+  .scoreboard .dot { width: 10px; height: 10px; display: inline-block; border-radius: 50%;
+    margin-right: 8px; vertical-align: middle; box-shadow: 0 0 6px currentColor; }
+  .scoreboard .name { color: var(--cyan); font-weight: 500; }
+  .scoreboard .dead .name { color: var(--ink-dim); opacity: 0.5; }
+  .scoreboard .bib { font-size: 10px; color: var(--ink-dim); letter-spacing: 0.1em; }
+  .scoreboard .num { font-variant-numeric: tabular-nums; text-align: right; }
+  .hp-wrap { width: 80px; }
+  .hp-bar { height: 6px; background: rgba(255,48,64,0.15); border: 1px solid rgba(255,48,64,0.4); border-radius: 1px; overflow: hidden; }
+  .hp-bar .fill { height: 100%; background: var(--blood); box-shadow: 0 0 6px var(--blood); transition: width 0.15s; }
+  .hp-wrap .num { font-size: 9px; color: var(--ink-dim); text-align: left; margin-top: 2px; }
+  .ammo-state .reload { color: var(--gold); animation: pulse 0.8s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+  .ready-tick { color: var(--green); }
+  .ready-dim { color: var(--ink-dim); }
+
+  /* ─── Insights panel ─── */
+  .insight-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; padding: 8px 0;
+    border-bottom: 1px solid rgba(92,246,255,0.08); font-size: 12px; }
+  .insight-row .k { color: var(--amethyst); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; align-self: center; }
+  .insight-row .v { color: var(--ink); }
+  .insight-row.warning .v { color: var(--gold); }
+  .insight-row.success .v { color: var(--green); }
+  .insight-row.danger .v { color: var(--blood); }
+
+  .insight-headline { font-size: 16px; color: var(--cyan); margin-bottom: 4px; letter-spacing: 0.04em; }
+  .insight-sub { font-size: 11px; color: var(--ink-dim); margin-bottom: 16px; }
+
+  .mgr-flag { display: block; padding: 8px 10px; border-left: 3px solid var(--gold);
+    background: rgba(255,209,102,0.08); margin-bottom: 6px; font-size: 11px; }
+  .mgr-flag.info { border-color: var(--cyan); background: rgba(92,246,255,0.06); }
+  .mgr-flag.ok { border-color: var(--green); background: rgba(105,240,174,0.08); color: var(--green); }
+  .mgr-flag.error { border-color: var(--blood); background: rgba(255,48,64,0.08); color: var(--blood); }
+
+  /* ─── Event log ─── */
+  .event-log { max-height: 360px; overflow-y: auto; font-size: 11px; line-height: 1.7; }
+  .event { display: grid; grid-template-columns: 70px 60px 1fr; gap: 8px; padding: 3px 6px;
+    border-left: 2px solid transparent; align-items: baseline; }
+  .event .ts { color: var(--ink-dim); font-size: 10px; }
+  .event .sev { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; padding: 0 6px; border-radius: 2px; }
+  .event .text { color: var(--ink); }
+  .event.info { border-color: var(--cyan-dim); }
+  .event.info .sev { color: var(--cyan); background: rgba(92,246,255,0.15); }
+  .event.warn { border-color: var(--gold); background: rgba(255,209,102,0.04); }
+  .event.warn .sev { color: var(--gold); background: rgba(255,209,102,0.18); }
+  .event.error { border-color: var(--blood); background: rgba(255,48,64,0.05); }
+  .event.error .sev { color: var(--blood); background: rgba(255,48,64,0.2); }
+  .event.kill { border-color: var(--blood); }
+  .event.kill .sev { color: var(--blood); background: rgba(255,48,64,0.2); }
+  .event.hit { border-color: var(--amethyst); }
+  .event.hit .sev { color: var(--amethyst); background: rgba(200,166,255,0.15); }
+  .event.join { border-color: var(--green); }
+  .event.join .sev { color: var(--green); background: rgba(105,240,174,0.15); }
+  .event.win { border-color: var(--gold); }
+  .event.win .sev { color: var(--gold); background: rgba(255,209,102,0.2); }
+
+  /* ─── Health panel ─── */
+  .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+  .metric { padding: 10px 12px; border: 1px solid rgba(92,246,255,0.15); border-radius: 3px;
+    background: rgba(10,6,18,0.6); text-align: left; }
+  .metric .k { color: var(--ink-dim); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 4px; }
+  .metric .v { color: var(--cyan); font-size: 20px; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .metric.warn .v { color: var(--gold); }
+  .metric.danger .v { color: var(--blood); }
+  .metric.good .v { color: var(--green); }
+  .metric .unit { font-size: 10px; color: var(--ink-dim); margin-left: 4px; }
+
+  footer { padding: 8px; text-align: center; color: var(--ink-dim); font-size: 9px;
+    letter-spacing: 0.18em; border-top: 1px solid rgba(92,246,255,0.1); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">GHOSTPAINT</span>
+  <span class="title">MANAGER · OPS DASHBOARD</span>
+  <div class="kpi"><div class="label">PLAYERS</div><div class="value" id="kpi-players">—</div></div>
+  <div class="kpi"><div class="label">UPTIME</div><div class="value" id="kpi-uptime">—</div></div>
+  <div class="kpi"><div class="label">MSG/S</div><div class="value" id="kpi-msgrate">—</div></div>
+  <span class="phase-pill" id="phase-pill">LOBBY</span>
+</header>
+
+<main>
+
+  <!-- Zone A · live scoreboard -->
+  <section class="panel zone-scoreboard">
+    <span class="cb"></span><span class="cbr"></span>
+    <h2>SCOREBOARD <span class="sub" id="scb-status">awaiting players</span></h2>
+    <table class="scoreboard">
+      <thead>
+        <tr>
+          <th>Player</th><th>HP</th><th>Ammo</th>
+          <th class="num">K</th><th class="num">D</th>
+          <th class="num">Acc</th><th>Ready</th><th>Last msg</th>
+        </tr>
+      </thead>
+      <tbody id="score-body">
+        <tr><td colspan="8" style="text-align:center; color: var(--ink-dim); padding: 20px;">No players yet. Tell them to join.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Zone B · manager insights -->
+  <section class="panel zone-insights">
+    <span class="cb"></span><span class="cbr"></span>
+    <h2>MANAGER INSIGHTS <span class="sub">auto-derived</span></h2>
+    <div class="insight-headline" id="insight-headline">Waiting for lobby activity…</div>
+    <div class="insight-sub" id="insight-sub">When players join, live analysis + issue flags appear here.</div>
+
+    <div id="insights-content"></div>
+    <div style="margin-top: 14px;" id="mgr-flags"></div>
+  </section>
+
+  <!-- Zone C · event log -->
+  <section class="panel zone-events">
+    <span class="cb"></span><span class="cbr"></span>
+    <h2>EVENT LOG <span class="sub" id="evt-count">0 events</span></h2>
+    <div class="event-log" id="event-log">
+      <div class="event info"><span class="ts">—</span><span class="sev">info</span><span class="text">dashboard ready. waiting for first event.</span></div>
+    </div>
+  </section>
+
+  <!-- Zone D · server health -->
+  <section class="panel zone-health">
+    <span class="cb"></span><span class="cbr"></span>
+    <h2>SERVER HEALTH <span class="sub">manager panel</span></h2>
+    <div class="health-grid">
+      <div class="metric"><div class="k">Uptime</div><div class="value v" id="m-uptime">0<span class="unit">s</span></div></div>
+      <div class="metric"><div class="k">Total connects</div><div class="value v" id="m-total">0</div></div>
+      <div class="metric"><div class="k">Live players</div><div class="value v" id="m-players">0</div></div>
+      <div class="metric"><div class="k">Spectators</div><div class="value v" id="m-spec">0</div></div>
+      <div class="metric"><div class="k">Messages</div><div class="value v" id="m-msg">0</div></div>
+      <div class="metric"><div class="k">Msg / sec</div><div class="value v" id="m-rate">0</div></div>
+      <div class="metric"><div class="k">Phase</div><div class="value v" id="m-phase">lobby</div></div>
+      <div class="metric" id="m-wincard"><div class="k">Winner</div><div class="value v" id="m-winner">—</div></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>GHOSTPAINT · MANAGER v2 · CLOUD</footer>
+
+<script>
+const BOOTSTRAP_URL = 'https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt';
+let ws, state = null, metrics = null;
+let eventBuffer = [];
+let wsOrigin = null;
+
+async function resolveOrigin() {
+  if (location.hostname.endsWith('.trycloudflare.com') ||
+      location.hostname.endsWith('.cloudspaces.litng.ai')) {
+    return location.protocol + '//' + location.host;
+  }
+  const r = await fetch(BOOTSTRAP_URL, { cache: 'no-store' });
+  return (await r.text()).trim();
+}
+
+async function connect() {
+  try {
+    if (!wsOrigin) wsOrigin = await resolveOrigin();
+    const wsUrl = wsOrigin.replace(/^http/, 'ws') + '/ws?role=spectator';
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => { console.log('admin WS open'); };
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'state') { state = m.state; render(); }
+      else if (m.type === 'metrics') { metrics = m.metrics; renderMetrics(); }
+      else if (m.type === 'event') { eventBuffer.push(m.event); if (eventBuffer.length > 100) eventBuffer.shift(); renderEvents(); }
+    };
+    ws.onclose = () => { wsOrigin = null; setTimeout(connect, 1500); };
+    ws.onerror = () => { console.error('admin WS error'); };
+  } catch (e) {
+    console.error('bootstrap failed:', e);
+    setTimeout(connect, 3000);
+  }
+}
+
+// ───── renderers ─────
+function render() {
+  if (!state) return;
+  const pill = document.getElementById('phase-pill');
+  pill.textContent = state.phase.toUpperCase();
+  pill.className = 'phase-pill ' + state.phase;
+  document.getElementById('kpi-players').textContent = state.players.length;
+
+  // Scoreboard
+  if (!state.players.length) {
+    document.getElementById('scb-status').textContent = 'awaiting players';
+    document.getElementById('score-body').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--ink-dim);padding:20px;">No players yet. Tell them to join.</td></tr>`;
+  } else {
+    document.getElementById('scb-status').textContent = `${state.players.length} · ${state.phase}`;
+    const sorted = [...state.players].sort((a,b) => (b.kills - a.kills) || (a.deaths - b.deaths));
+    document.getElementById('score-body').innerHTML = sorted.map(p => {
+      const acc = p.shots ? Math.round(100 * p.hits / p.shots) : 0;
+      const last = lastMsgAgo(p.id);
+      return `<tr class="${!p.alive ? 'dead' : ''}">
+        <td><span class="dot" style="background:${p.color};color:${p.color}"></span>
+            <span class="name">${p.name}</span> <span class="bib">${p.bibName}</span></td>
+        <td><div class="hp-wrap"><div class="hp-bar"><div class="fill" style="width:${p.hp}%"></div></div><div class="num">${p.hp}</div></div></td>
+        <td class="ammo-state">${p.reloading ? '<span class="reload">RELOADING</span>' : p.ammo + '/15'}</td>
+        <td class="num">${p.kills}</td>
+        <td class="num">${p.deaths}</td>
+        <td class="num">${acc}%</td>
+        <td class="${p.ready ? 'ready-tick' : 'ready-dim'}">${p.ready ? '✓' : '○'}</td>
+        <td style="color:var(--ink-dim); font-size:10px;">${last}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Insights
+  renderInsights();
+}
+
+function renderInsights() {
+  const h = document.getElementById('insight-headline');
+  const s = document.getElementById('insight-sub');
+  const content = document.getElementById('insights-content');
+  const flags = document.getElementById('mgr-flags');
+
+  const insights = [];
+  const mgrFlags = [];
+
+  if (!state || state.players.length === 0) {
+    h.textContent = 'Lobby empty';
+    s.textContent = 'Send players the URL. I will tell you when they join.';
+    content.innerHTML = '';
+    flags.innerHTML = '';
+    return;
+  }
+
+  const sorted = [...state.players].sort((a,b) => (b.kills - a.kills) || (a.deaths - b.deaths));
+  const leader = sorted[0];
+
+  if (state.phase === 'lobby') {
+    const ready = state.players.filter(p => p.ready).length;
+    const total = state.players.length;
+    h.textContent = `Lobby · ${ready} of ${total} ready`;
+    s.textContent = total < 2
+      ? 'Min 2 players for auto-start, or anyone can force-start solo.'
+      : ready === total ? 'All ready — countdown starting.' : `${total - ready} player(s) not ready yet.`;
+    insights.push({k: 'players', v: total, cls: ''});
+    insights.push({k: 'ready', v: `${ready} / ${total}`, cls: ready === total ? 'success' : ''});
+    if (total >= 2 && ready < total) mgrFlags.push({type: 'info', text: `Waiting on ${total - ready} player(s) to tap Ready.`});
+    if (total < 2) mgrFlags.push({type: 'info', text: 'Only 1 player · tell them to tap START SOLO · AR TEST to bypass 2-player min.'});
+  }
+  else if (state.phase === 'countdown') {
+    h.textContent = 'Countdown · match starting';
+    s.textContent = 'Players are about to be dropped into AR combat.';
+    if (state.countdownEndsAt) {
+      const left = Math.max(0, Math.ceil((state.countdownEndsAt - Date.now()) / 1000));
+      insights.push({k: 'start in', v: `${left}s`, cls: 'warning'});
+    }
+  }
+  else if (state.phase === 'playing') {
+    h.textContent = `${leader.name} leads with ${leader.kills} kills`;
+    const timeLeftMs = Math.max(0, (state.matchEndsAt || 0) - Date.now());
+    const mm = Math.floor(timeLeftMs / 60000);
+    const ss = String(Math.floor(timeLeftMs / 1000) % 60).padStart(2, '0');
+    s.textContent = `Match time left · ${mm}:${ss}`;
+    insights.push({k: 'leader', v: leader.name + ' · ' + leader.kills + 'k', cls: 'success'});
+    insights.push({k: 'match end', v: `${mm}:${ss}`, cls: timeLeftMs < 30000 ? 'warning' : ''});
+
+    // Balance analysis
+    const maxKills = leader.kills;
+    const minKills = sorted[sorted.length-1].kills;
+    const spread = maxKills - minKills;
+    if (spread >= 5) {
+      mgrFlags.push({type: 'warn', text: `Imbalance: ${leader.name} has ${spread} kill lead over ${sorted[sorted.length-1].name}. Consider resetting for next round.`});
+    } else if (maxKills >= 1) {
+      mgrFlags.push({type: 'ok', text: `Match is competitive · spread ${spread} kills.`});
+    }
+
+    // Win prediction (simple)
+    if (leader.kills >= 7 && leader.kills < 10) {
+      mgrFlags.push({type: 'warn', text: `${leader.name} at ${leader.kills}/10 kills · match ending soon.`});
+    }
+
+    // Activity analysis — idle players
+    if (metrics) {
+      for (const p of state.players) {
+        const act = metrics.playerActivity?.[p.id];
+        if (!act) continue;
+        const ageSec = (Date.now() - act.lastMessageAt) / 1000;
+        if (ageSec > 30 && p.alive) {
+          mgrFlags.push({type: 'warn', text: `${p.name} idle ${Math.round(ageSec)}s · check connection.`});
+        }
+      }
+    }
+
+    // Low HP warning
+    for (const p of state.players) {
+      if (p.alive && p.hp < 30) {
+        mgrFlags.push({type: 'info', text: `${p.name} critical HP · ${p.hp}/100.`});
+      }
+    }
+  }
+  else if (state.phase === 'ended') {
+    const winner = state.players.find(p => p.id === state.winner);
+    h.textContent = winner ? `★ ${winner.name} WINS` : 'Match ended · stalemate';
+    s.textContent = 'Match over. Players can leave or stay for next round.';
+    insights.push({k: 'winner', v: winner?.name || 'nobody', cls: 'success'});
+    insights.push({k: 'top K/D', v: `${leader.name} · ${leader.kills}/${leader.deaths}`, cls: ''});
+    mgrFlags.push({type: 'ok', text: `Match complete · server reset for next round in 30s.`});
+  }
+
+  content.innerHTML = insights.map(i => `
+    <div class="insight-row ${i.cls}">
+      <div class="k">${i.k}</div><div class="v">${i.v}</div>
+    </div>
+  `).join('');
+  flags.innerHTML = mgrFlags.map(f => `<div class="mgr-flag ${f.type}">${escapeHtml(f.text)}</div>`).join('');
+}
+
+function renderMetrics() {
+  if (!metrics) return;
+  document.getElementById('kpi-uptime').textContent = fmtDuration(metrics.uptimeSec);
+  document.getElementById('kpi-msgrate').textContent = metrics.messagesPerSecond;
+  document.getElementById('m-uptime').innerHTML = fmtDuration(metrics.uptimeSec);
+  document.getElementById('m-total').textContent = metrics.totalConnections;
+  document.getElementById('m-players').textContent = metrics.currentPlayers;
+  document.getElementById('m-spec').textContent = metrics.currentSpectators;
+  document.getElementById('m-msg').textContent = metrics.messagesReceived;
+  document.getElementById('m-rate').textContent = metrics.messagesPerSecond;
+  document.getElementById('m-phase').textContent = state?.phase || '—';
+  document.getElementById('m-winner').textContent = state?.winner && state?.players
+    ? (state.players.find(p => p.id === state.winner)?.name || '—')
+    : '—';
+}
+
+function renderEvents() {
+  const log = document.getElementById('event-log');
+  const cnt = document.getElementById('evt-count');
+  cnt.textContent = eventBuffer.length + ' events';
+  log.innerHTML = [...eventBuffer].slice(-50).reverse().map(e => `
+    <div class="event ${e.severity}">
+      <span class="ts">${fmtTime(e.ts)}</span>
+      <span class="sev">${e.severity}</span>
+      <span class="text">${escapeHtml(e.text)}</span>
+    </div>
+  `).join('');
+}
+
+function lastMsgAgo(playerId) {
+  if (!metrics?.playerActivity?.[playerId]) return '—';
+  const ageSec = Math.floor((Date.now() - metrics.playerActivity[playerId].lastMessageAt) / 1000);
+  if (ageSec < 1) return 'now';
+  if (ageSec < 60) return ageSec + 's ago';
+  return Math.floor(ageSec/60) + 'm ago';
+}
+function fmtDuration(s) {
+  if (s < 60) return s + '<span class="unit">s</span>';
+  if (s < 3600) return Math.floor(s/60) + 'm ' + (s%60) + 's';
+  return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+}
+function fmtTime(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0'); }
+function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// live refresh
+setInterval(() => { if (state) render(); if (metrics) renderMetrics(); }, 500);
+connect();
+</script>
+</body>
+</html>

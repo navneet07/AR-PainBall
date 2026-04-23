@@ -277,10 +277,14 @@
     <input type="text" id="name-input" placeholder="Your callsign (3–12 chars)" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off"/>
     <input type="text" id="code-input" class="code-input" placeholder="Room code (blank = host)" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="off"/>
     <button id="join-btn">Create room</button>
-    <button id="cam-btn" class="ghost">Enable camera (for AR bibs)</button>
+    <button class="ghost cam-btn">📷  Enable camera (for AR bibs)</button>
     <p style="font-size:11px;color:var(--ink-dim);margin-top:12px;text-align:center;line-height:1.5;">
       Host: leave code blank → you get a 6-digit code. Share it.<br>
       Guest: type the 6-digit code your host gave you.
+    </p>
+    <p style="font-size:10px;color:var(--ink-dim);margin-top:14px;text-align:center;">
+      Watching / stats only?
+      <a href="admin.html" style="color:var(--cyan);text-decoration:none;">Open admin dashboard →</a>
     </p>
   </div>
 
@@ -292,6 +296,7 @@
       <div class="h" id="room-code-hint">Share with your squad</div>
     </div>
     <ul class="lobby-roster" id="roster"></ul>
+    <button class="ghost cam-btn">📷  Enable camera (for AR bibs)</button>
     <button id="ready-btn" class="ready">Ready up</button>
     <button id="force-start-btn" class="warn">Start solo · test</button>
     <button id="leave-btn" class="danger">Leave</button>
@@ -527,9 +532,15 @@ function closeLobby() {
 }
 
 // ─── camera permission (opt-in) ───────────────────────────
-$('cam-btn').addEventListener('click', enableCamera);
+document.querySelectorAll('.cam-btn').forEach(btn => {
+  btn.addEventListener('click', enableCamera);
+});
 async function enableCamera() {
   if (cameraOn) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('This browser does not support camera access', 'err', 5000);
+    return;
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -540,11 +551,20 @@ async function enableCamera() {
     await vid.play();
     vid.classList.add('on');
     cameraOn = true;
-    $('cam-btn').textContent = 'Camera ON · AR bibs enabled';
-    $('cam-btn').disabled = true;
+    document.querySelectorAll('.cam-btn').forEach(btn => {
+      btn.textContent = '✓ Camera ON · AR bibs ready';
+      btn.disabled = true;
+      btn.style.color = 'var(--green)';
+      btn.style.borderColor = 'var(--green)';
+    });
+    $('targets').style.display = 'none';
     startDetection();
+    toast('Camera ready · point at a bib to aim', 'info', 3000);
   } catch (e) {
-    toast('Camera permission denied — falling back to target cards', 'err', 4000);
+    const msg = e.name === 'NotAllowedError'
+      ? 'Camera permission denied. Go to Settings → Safari → Camera and allow.'
+      : ('Camera error: ' + (e.message || e.name));
+    toast(msg, 'err', 6000);
   }
 }
 
