@@ -358,7 +358,8 @@ document.getElementById('enable-motion-btn').addEventListener('click', async () 
 <script type="module">
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { GLTFLoader } from 'https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
-import { SkeletonUtils } from 'https://esm.sh/three@0.160.0/examples/jsm/utils/SkeletonUtils.js';
+// SkeletonUtils.js exports individual fns (clone, retargetClip, ...), not a namespace
+import * as SkeletonUtils from 'https://esm.sh/three@0.160.0/examples/jsm/utils/SkeletonUtils.js';
 
 // ═══════════════════════════════════════════════════════════
 //  GhostPaint Zombies · 3D AR
