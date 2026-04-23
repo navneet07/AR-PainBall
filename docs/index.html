@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"/>
+
+<!-- PWA / iOS home-screen app config -->
+<title>GhostPaint</title>
+<link rel="manifest" href="manifest.webmanifest"/>
+<link rel="apple-touch-icon" href="icon-180.png"/>
+<link rel="icon" type="image/svg+xml" href="icon.svg"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="GhostPaint"/>
+<meta name="theme-color" content="#0a0612"/>
+<meta name="format-detection" content="telephone=no"/>
+
+<style>
+  :root {
+    --cyan: #5cf6ff; --amethyst: #c8a6ff; --blood: #ff3040;
+    --gold: #ffd166; --green: #69f0ae;
+    --bg-0: #0a0612; --bg-1: #15102a;
+    --ink: #e9e3ff; --ink-dim: #8b86b3;
+    --glow: 0 0 12px rgba(92,246,255,0.4);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #000; color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    height: 100vh; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; }
+
+  /* Gradient fallback (behind camera) */
+  .world-gradient {
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(92,246,255,0.08), transparent 40%),
+      radial-gradient(circle at 70% 60%, rgba(200,166,255,0.06), transparent 50%),
+      linear-gradient(135deg, #0a0612 0%, #15102a 40%, #0a0612 100%);
+  }
+  /* Camera backdrop (shown after permission granted) */
+  video.world-cam {
+    position: fixed; inset: 0; z-index: 1;
+    width: 100vw; height: 100vh; object-fit: cover;
+    display: none;
+  }
+  video.world-cam.on { display: block; }
+
+  /* Header bar */
+  .top {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(10,6,18,0.7); backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(92,246,255,0.2);
+  }
+  .top .brand { color: var(--amethyst); font-size: 12px; letter-spacing: 0.22em; }
+  .top .phase { color: var(--cyan); font-size: 11px; letter-spacing: 0.16em; }
+  .top .code { color: var(--gold); font-size: 10px; letter-spacing: 0.28em; margin-left: 6px; }
+  .top .conn { margin-left: auto; font-size: 10px; color: var(--ink-dim); }
+  .top .conn.ok { color: var(--green); }
+  .top .conn.bad { color: var(--blood); }
+
+  /* Compass */
+  .compass {
+    position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
+    width: min(420px, 90vw); height: 22px; z-index: 5;
+    border: 1px solid rgba(92,246,255,0.3); border-radius: 2px;
+    background: rgba(10,6,18,0.5); overflow: hidden;
+    font-size: 10px; color: var(--cyan); box-shadow: var(--glow);
+  }
+  .compass-track { position: absolute; top: 3px; left: 0; white-space: nowrap;
+    letter-spacing: 6px; transition: transform 0.2s; }
+  .compass::before { content: "▼"; position: absolute; top: -10px; left: 50%;
+    transform: translateX(-50%); color: var(--cyan); font-size: 10px; }
+
+  /* Panels */
+  .panel {
+    position: fixed; z-index: 5;
+    border: 1px solid rgba(92,246,255,0.3); padding: 10px 14px;
+    background: rgba(10,6,18,0.55); backdrop-filter: blur(4px);
+    border-radius: 3px; box-shadow: var(--glow); font-size: 11px;
+  }
+  .panel .k { color: var(--amethyst); letter-spacing: 0.14em; text-transform: uppercase;
+    font-size: 9px; margin-bottom: 4px; }
+  .panel .v { font-size: 16px; color: var(--cyan); font-variant-numeric: tabular-nums; }
+
+  .health { bottom: 20px; left: 20px; min-width: 140px; }
+  .health .hp-bar { width: 120px; height: 8px; background: rgba(255,48,64,0.12);
+    border: 1px solid var(--blood); margin-top: 6px; overflow: hidden; }
+  .health .hp-fill { height: 100%; background: var(--blood); box-shadow: 0 0 10px var(--blood);
+    transition: width 0.15s; }
+  .health.low .v { color: var(--blood); animation: pulse 0.8s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+  .ammo { bottom: 20px; right: 120px; min-width: 120px; text-align: right; }
+  .ammo .v { color: var(--gold); }
+  .ammo.reloading .v { animation: pulse 0.5s infinite; }
+
+  .scoreboard { top: 80px; right: 20px; min-width: 180px; padding: 10px 12px; max-width: 220px; }
+  .scoreboard table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .scoreboard th { text-align: left; padding: 3px 4px; color: var(--amethyst);
+    font-weight: 500; letter-spacing: 0.12em; border-bottom: 1px solid rgba(92,246,255,0.2); font-size: 9px; }
+  .scoreboard td { padding: 4px; }
+  .scoreboard .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; box-shadow: 0 0 4px currentColor; }
+
+  .kill-feed { top: 80px; left: 20px; min-width: 160px; max-width: 220px; padding: 8px 10px; }
+  .kill-feed li { list-style: none; padding: 4px 0; font-size: 10px;
+    border-left: 2px solid var(--blood); padding-left: 8px; margin-bottom: 3px;
+    animation: slideIn 0.3s ease-out; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; } }
+  .kill-feed ul { list-style: none; padding: 0; margin: 0; }
+
+  /* Reticle */
+  .reticle {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 60px; height: 60px; z-index: 4; pointer-events: none;
+  }
+  .reticle .ring { position: absolute; inset: 0; border: 1.5px solid var(--cyan);
+    border-radius: 50%; box-shadow: var(--glow); opacity: 0.8; }
+  .reticle .cross::before, .reticle .cross::after {
+    content: ""; position: absolute; background: var(--cyan); box-shadow: var(--glow);
+  }
+  .reticle .cross::before { left: 50%; top: 12px; bottom: 12px; width: 1.5px; transform: translateX(-50%); }
+  .reticle .cross::after  { top: 50%; left: 12px; right: 12px; height: 1.5px; transform: translateY(-50%); }
+  .reticle.hit { animation: hitFlash 0.3s; }
+  @keyframes hitFlash {
+    0% { transform: translate(-50%,-50%) scale(1); }
+    50% { transform: translate(-50%,-50%) scale(1.3); }
+    100% { transform: translate(-50%,-50%) scale(1); }
+  }
+  .reticle.hit .ring { border-color: var(--blood); box-shadow: 0 0 20px var(--blood); }
+
+  /* Fire button */
+  .fire-btn {
+    position: fixed; bottom: 24px; right: 24px; z-index: 8;
+    width: 92px; height: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, rgba(255,48,64,0.35), rgba(10,6,18,0.8));
+    border: 2px solid var(--blood);
+    color: var(--blood); font-family: inherit; font-size: 13px; letter-spacing: 0.3em; font-weight: 700;
+    box-shadow: 0 0 20px rgba(255,48,64,0.5), inset 0 0 20px rgba(255,48,64,0.2);
+    display: none;
+    touch-action: manipulation;
+  }
+  .fire-btn.on { display: block; }
+  .fire-btn:active { transform: scale(0.92); background: radial-gradient(circle at 50% 40%, rgba(255,48,64,0.7), rgba(10,6,18,0.9)); }
+  .fire-btn[disabled] { opacity: 0.45; border-color: var(--ink-dim); color: var(--ink-dim); box-shadow: none; }
+
+  /* Bib overlays (drawn over camera feed when QR codes are detected) */
+  #bib-overlays { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+  .bib-overlay {
+    position: absolute; border: 2px solid var(--cyan);
+    box-shadow: 0 0 12px rgba(92,246,255,0.45);
+    transition: border-color 0.1s, box-shadow 0.1s;
+    pointer-events: auto;
+  }
+  .bib-overlay .tag {
+    position: absolute; top: -22px; left: 0;
+    font-size: 10px; letter-spacing: 0.15em;
+    background: rgba(10,6,18,0.8); color: var(--cyan);
+    padding: 2px 6px; white-space: nowrap;
+  }
+  .bib-overlay.aimed {
+    border-color: var(--blood);
+    box-shadow: 0 0 18px var(--blood);
+  }
+  .bib-overlay.aimed .tag { color: var(--blood); background: rgba(0,0,0,0.8); }
+  .bib-overlay.me { border-color: var(--ink-dim); opacity: 0.5; }
+  .bib-overlay.me .tag { color: var(--ink-dim); }
+
+  /* Fallback "target cards" shown when camera not available */
+  .targets { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center; gap: 30px;
+    z-index: 2; pointer-events: none; padding: 120px 40px 120px; flex-wrap: wrap; }
+  .target-card {
+    width: 140px; padding: 12px 10px; border: 2px dashed rgba(92,246,255,0.4);
+    background: rgba(10,6,18,0.5); text-align: center;
+    pointer-events: auto; cursor: pointer; transition: all 0.15s;
+  }
+  .target-card.aimed { border-style: solid; border-color: var(--blood);
+    box-shadow: 0 0 18px var(--blood); }
+  .target-card.me { border-color: var(--ink-dim); opacity: 0.5; cursor: not-allowed; }
+  .target-card.dead { opacity: 0.3; filter: grayscale(1); }
+  .target-card .color { width: 32px; height: 32px; margin: 0 auto 6px; border-radius: 2px;
+    box-shadow: 0 0 10px currentColor; }
+  .target-card .name { font-size: 12px; color: var(--cyan); margin-bottom: 2px; }
+  .target-card .bib { font-size: 9px; color: var(--ink-dim); letter-spacing: 0.1em; }
+  .target-card .hp { font-size: 10px; color: var(--blood); margin-top: 4px; }
+
+  /* Damage vignette */
+  .damage-flash { position: fixed; inset: 0; pointer-events: none; z-index: 6;
+    box-shadow: inset 0 0 120px 30px rgba(255,48,64,0); transition: box-shadow 0.2s; }
+  .damage-flash.active { box-shadow: inset 0 0 160px 40px rgba(255,48,64,0.7); }
+
+  /* Lobby overlay */
+  .overlay { position: fixed; inset: 0; background: rgba(10,6,18,0.85);
+    backdrop-filter: blur(10px); z-index: 20;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 20px; padding: 30px;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .overlay .card { border: 1px solid var(--cyan); padding: 22px 26px; min-width: 300px;
+    max-width: 420px; width: 100%; background: rgba(31,24,56,0.8); box-shadow: var(--glow); }
+  .overlay h1 { color: var(--amethyst); margin: 0 0 18px; letter-spacing: 0.2em;
+    font-size: 22px; text-align: center; }
+  .overlay input { width: 100%; background: rgba(10,6,18,0.8); color: var(--ink);
+    border: 1px solid rgba(92,246,255,0.35); padding: 12px; font-family: inherit;
+    font-size: 16px; border-radius: 2px; margin-bottom: 12px; }
+  .overlay input.code-input { letter-spacing: 0.3em; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .overlay button { width: 100%; background: transparent; border: 1px solid var(--cyan);
+    color: var(--cyan); padding: 14px; font-family: inherit; font-size: 12px;
+    letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer; border-radius: 2px;
+    margin-top: 8px; touch-action: manipulation; }
+  .overlay button:active { background: rgba(92,246,255,0.15); }
+  .overlay button.ready { color: var(--green); border-color: var(--green); }
+  .overlay button.warn  { color: var(--gold); border-color: var(--gold); }
+  .overlay button.danger{ color: var(--blood); border-color: var(--blood); }
+  .overlay button.ghost { color: var(--ink-dim); border-color: var(--ink-dim); }
+
+  .room-code-banner {
+    text-align: center; margin: -4px 0 10px;
+    padding: 10px; border: 1px dashed var(--gold);
+    background: rgba(255,209,102,0.06);
+  }
+  .room-code-banner .k { font-size: 9px; color: var(--amethyst); letter-spacing: 0.2em; }
+  .room-code-banner .v { font-size: 30px; color: var(--gold); letter-spacing: 0.3em;
+    font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .room-code-banner .h { font-size: 9px; color: var(--ink-dim); margin-top: 4px; }
+
+  .lobby-roster { list-style: none; padding: 0; margin: 14px 0; font-size: 12px; }
+  .lobby-roster li { padding: 6px 0; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid rgba(92,246,255,0.1); }
+  .lobby-roster .ready { color: var(--green); margin-left: auto; }
+
+  .big-countdown { font-size: 96px; color: var(--gold); letter-spacing: 0.2em;
+    text-align: center; text-shadow: 0 0 30px rgba(255,209,102,0.7); font-variant-numeric: tabular-nums; }
+
+  .winner-screen .w { font-size: 28px; color: var(--green); letter-spacing: 0.2em;
+    text-transform: uppercase; margin-bottom: 20px; text-shadow: 0 0 24px rgba(105,240,174,0.6);
+    text-align: center; }
+  .winner-screen .loser { color: var(--blood); }
+  .winner-screen table { margin: 20px auto; font-size: 13px; }
+  .winner-screen th { padding: 6px 12px; color: var(--amethyst); text-align: left; font-size: 10px; letter-spacing: 0.16em; }
+  .winner-screen td { padding: 6px 12px; color: var(--ink); }
+
+  .hint { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: var(--ink-dim); z-index: 4; letter-spacing: 0.1em;
+    background: rgba(10,6,18,0.6); padding: 4px 12px; border-radius: 20px; }
+
+  /* Permission/status toast */
+  .status-toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+    padding: 10px 18px; background: rgba(10,6,18,0.9); color: var(--cyan);
+    border: 1px solid var(--cyan); font-size: 11px; letter-spacing: 0.12em;
+    z-index: 30; display: none; }
+  .status-toast.show { display: block; }
+  .status-toast.err { color: var(--blood); border-color: var(--blood); }
+
+  /* Compass permission button (shown only on iOS when needed) */
+  .compass-perm-btn {
+    position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: 0.14em; padding: 8px 16px;
+    background: rgba(10,6,18,0.85); color: var(--cyan); border: 1px solid var(--cyan);
+    z-index: 7; display: none; cursor: pointer;
+  }
+  .compass-perm-btn.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="world-gradient"></div>
+<video id="camera" class="world-cam" autoplay playsinline muted></video>
+
+<!-- Lobby overlay -->
+<div class="overlay" id="lobby">
+  <div class="card" id="lobby-join">
+    <h1>GHOSTPAINT</h1>
+    <input type="text" id="name-input" placeholder="Your callsign (3–12 chars)" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off"/>
+    <input type="text" id="code-input" class="code-input" placeholder="Room code (blank = host)" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="off"/>
+    <button id="join-btn">Create room</button>
+    <button id="cam-btn" class="ghost">Enable camera (for AR bibs)</button>
+    <p style="font-size:11px;color:var(--ink-dim);margin-top:12px;text-align:center;line-height:1.5;">
+      Host: leave code blank → you get a 6-digit code. Share it.<br>
+      Guest: type the 6-digit code your host gave you.
+    </p>
+  </div>
+
+  <div class="card" id="lobby-wait" style="display:none;">
+    <h1>Lobby</h1>
+    <div class="room-code-banner">
+      <div class="k">ROOM CODE</div>
+      <div class="v" id="room-code-value">——————</div>
+      <div class="h" id="room-code-hint">Share with your squad</div>
+    </div>
+    <ul class="lobby-roster" id="roster"></ul>
+    <button id="ready-btn" class="ready">Ready up</button>
+    <button id="force-start-btn" class="warn">Start solo · test</button>
+    <button id="leave-btn" class="danger">Leave</button>
+    <p style="font-size:10px;color:var(--ink-dim);margin-top:14px;text-align:center;">
+      Match starts when ALL players are ready (min 2).
+    </p>
+  </div>
+
+  <div class="card" id="lobby-countdown" style="display:none;text-align:center;">
+    <h1>Get ready</h1>
+    <div class="big-countdown" id="countdown-num">3</div>
+  </div>
+
+  <div class="card" id="lobby-winner" style="display:none;">
+    <div class="winner-screen" id="winner-body"></div>
+    <button id="again-btn">Play again</button>
+  </div>
+</div>
+
+<!-- Game HUD -->
+<div class="top" id="top-bar" style="display:none;">
+  <span class="brand">GHOSTPAINT</span>
+  <span class="phase" id="top-phase">PLAYING</span>
+  <span class="code" id="top-code"></span>
+  <span class="conn ok" id="conn">LIVE</span>
+</div>
+
+<div class="compass" id="compass" style="display:none;">
+  <div class="compass-track" id="compass-track">W  ·  ·  ·  NW  ·  ·  ·  N  ·  ·  ·  NE  ·  ·  ·  E  ·  ·  ·  SE  ·  ·  ·  S  ·  ·  ·  SW  ·  ·  ·  W</div>
+</div>
+<button class="compass-perm-btn" id="compass-perm-btn">Enable compass</button>
+
+<div class="kill-feed panel" id="kill-feed-hud" style="display:none;">
+  <div class="k">Kill feed</div>
+  <ul id="kill-feed-list"></ul>
+</div>
+
+<div class="scoreboard panel" id="scoreboard" style="display:none;">
+  <div class="k">Scoreboard</div>
+  <table><tbody id="score-body"></tbody></table>
+</div>
+
+<div id="bib-overlays"></div>
+<div class="targets" id="targets" style="display:none;"></div>
+
+<div class="reticle" id="reticle" style="display:none;">
+  <div class="ring"></div><div class="cross"></div>
+</div>
+
+<div class="health panel" id="health" style="display:none;">
+  <div class="k">Health</div>
+  <div class="v" id="hp-value">100</div>
+  <div class="hp-bar"><div class="hp-fill" id="hp-fill" style="width:100%"></div></div>
+</div>
+
+<div class="ammo panel" id="ammo" style="display:none;">
+  <div class="k">Ammo</div>
+  <div class="v" id="ammo-value">15 / 15</div>
+</div>
+
+<button id="fire-btn" class="fire-btn" disabled>FIRE</button>
+
+<div class="damage-flash" id="damage-flash"></div>
+<div class="status-toast" id="status-toast"></div>
+
+<div class="hint" id="hint" style="display:none;">
+  Tap a bib or target → FIRE
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  GhostPaint PWA · v0.4 camera + QR + URL bootstrap
+// ═══════════════════════════════════════════════════════════
+
+const BOOTSTRAP_URL = 'https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt';
+
+let ws = null, me = null, state = null;
+let aimedBib = null, roomCode = null, isHost = false;
+let wsOrigin = null;                              // resolved https://... URL
+let cameraOn = false;
+let barcodeDetector = null;
+let detectionTimer = null;
+let lastBibs = [];                                // most recent detections
+
+function $(id) { return document.getElementById(id); }
+
+// ─── status toast ─────────────────────────────────────────
+let toastTimer = null;
+function toast(msg, kind='info', ms=3500) {
+  const el = $('status-toast');
+  el.textContent = msg;
+  el.className = 'status-toast show' + (kind === 'err' ? ' err' : '');
+  clearTimeout(toastTimer);
+  if (ms > 0) toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ─── URL bootstrap ────────────────────────────────────────
+async function resolveServerOrigin() {
+  // If the page is served from the tunnel itself (e.g. fake-client.html),
+  // prefer same-origin. Else, fetch bootstrap.
+  if (location.hostname.endsWith('.trycloudflare.com') ||
+      location.hostname.endsWith('.cloudspaces.litng.ai')) {
+    return location.protocol + '//' + location.host;
+  }
+  try {
+    const resp = await fetch(BOOTSTRAP_URL, { cache: 'no-store' });
+    const txt = (await resp.text()).trim();
+    if (!txt.startsWith('http')) throw new Error('bad URL in bootstrap');
+    return txt;
+  } catch (e) {
+    throw new Error('Cannot fetch bootstrap URL: ' + e.message);
+  }
+}
+
+// ─── WebSocket connection ─────────────────────────────────
+async function connect() {
+  if (ws && ws.readyState <= 1) return;   // already open / opening
+  try {
+    if (!wsOrigin) {
+      toast('Resolving server…');
+      wsOrigin = await resolveServerOrigin();
+    }
+    const wsUrl = wsOrigin.replace(/^http/, 'ws') + '/ws?role=player';
+    toast('Connecting…');
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => { $('conn').textContent = 'LIVE'; $('conn').className = 'conn ok'; toast('Connected', 'info', 1000); };
+    ws.onclose = () => {
+      $('conn').textContent = 'OFFLINE'; $('conn').className = 'conn bad';
+      setTimeout(() => { wsOrigin = null; connect(); }, 1500);  // re-resolve in case of rotation
+    };
+    ws.onerror = () => toast('Socket error — retrying', 'err', 2000);
+    ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
+  } catch (e) {
+    toast(e.message, 'err', 5000);
+    setTimeout(connect, 3000);
+  }
+}
+
+function send(msg) { if (ws?.readyState === 1) ws.send(JSON.stringify(msg)); }
+
+// ─── message handler ──────────────────────────────────────
+function handle(m) {
+  switch (m.type) {
+    case 'room_joined':
+      me = m.you;
+      roomCode = m.room.code;
+      isHost = !!m.room.isHost;
+      $('room-code-value').textContent = roomCode;
+      $('room-code-hint').textContent = isHost ? 'Share with your squad' : 'You joined';
+      $('top-code').textContent = '· ' + roomCode;
+      showLobbyWait();
+      break;
+    case 'state': state = m.state; render(); break;
+    case 'game_start': closeLobby(); break;
+    case 'hit': onHit(m); break;
+    case 'damage': onDamage(m); break;
+    case 'kill': onKill(m); break;
+    case 'respawn': onRespawn(m); break;
+    case 'game_end': onGameEnd(m); break;
+    case 'reload_complete': onReload(); break;
+    case 'shot_missed': break;
+    case 'dry_fire': break;
+    case 'error': toast('Server: ' + m.error, 'err', 4000); break;
+  }
+}
+
+// ─── lobby: create / join ─────────────────────────────────
+function updateJoinBtnLabel() {
+  const code = $('code-input').value.trim();
+  $('join-btn').textContent = code.length === 6 ? 'Join room ' + code : 'Create room';
+}
+$('code-input').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+  updateJoinBtnLabel();
+});
+
+$('join-btn').addEventListener('click', async () => {
+  const name = $('name-input').value.trim();
+  if (!name) return toast('Callsign required', 'err');
+  const code = $('code-input').value.trim();
+  if (code.length !== 0 && !/^\d{6}$/.test(code)) return toast('Code must be 6 digits (or blank)', 'err');
+  await connect();
+  // Wait until socket is open, then send
+  const tryPost = () => {
+    if (ws && ws.readyState === 1) {
+      if (code.length === 0) send({ type: 'create_room', name });
+      else send({ type: 'join_room', code, name });
+    } else { setTimeout(tryPost, 200); }
+  };
+  tryPost();
+  // persist name
+  try { localStorage.setItem('gp-callsign', name); } catch {}
+});
+
+$('name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('join-btn').click(); });
+$('code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('join-btn').click(); });
+
+// Restore last callsign
+try {
+  const saved = localStorage.getItem('gp-callsign');
+  if (saved) $('name-input').value = saved;
+} catch {}
+
+// Lobby buttons
+$('ready-btn').addEventListener('click', () => {
+  if (!me) return;
+  const myP = state?.players.find(p => p.id === me.id);
+  send({ type: 'ready', ready: !(myP?.ready) });
+});
+$('leave-btn').addEventListener('click', () => { send({ type: 'leave' }); setTimeout(() => location.reload(), 200); });
+$('force-start-btn').addEventListener('click', () => { send({ type: 'force_start' }); });
+$('again-btn').addEventListener('click', () => { location.reload(); });
+
+function showLobbyWait() {
+  $('lobby-join').style.display = 'none';
+  $('lobby-wait').style.display = 'block';
+  $('lobby-winner').style.display = 'none';
+}
+
+function closeLobby() {
+  $('lobby').style.display = 'none';
+  $('top-bar').style.display = 'flex';
+  $('compass').style.display = 'block';
+  $('kill-feed-hud').style.display = 'block';
+  $('scoreboard').style.display = 'block';
+  $('reticle').style.display = 'block';
+  $('health').style.display = 'block';
+  $('ammo').style.display = 'block';
+  $('hint').style.display = 'block';
+  $('fire-btn').classList.add('on');
+  if (!cameraOn) $('targets').style.display = 'flex';
+  maybeRequestMotion();
+}
+
+// ─── camera permission (opt-in) ───────────────────────────
+$('cam-btn').addEventListener('click', enableCamera);
+async function enableCamera() {
+  if (cameraOn) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    const vid = $('camera');
+    vid.srcObject = stream;
+    await vid.play();
+    vid.classList.add('on');
+    cameraOn = true;
+    $('cam-btn').textContent = 'Camera ON · AR bibs enabled';
+    $('cam-btn').disabled = true;
+    startDetection();
+  } catch (e) {
+    toast('Camera permission denied — falling back to target cards', 'err', 4000);
+  }
+}
+
+// ─── BarcodeDetector loop ─────────────────────────────────
+async function startDetection() {
+  if (!('BarcodeDetector' in window)) {
+    toast('This browser can\'t detect QR codes. Use iOS 17+ Safari or Chrome.', 'err', 6000);
+    return;
+  }
+  barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+  clearInterval(detectionTimer);
+  detectionTimer = setInterval(runDetection, 100);   // 10 Hz
+}
+
+async function runDetection() {
+  const vid = $('camera');
+  if (!vid || vid.readyState < 2 || !barcodeDetector) return;
+  let codes = [];
+  try { codes = await barcodeDetector.detect(vid); } catch { return; }
+  // filter to bibs (raw value like "bib-01")
+  const bibs = codes
+    .filter(c => typeof c.rawValue === 'string' && c.rawValue.startsWith('bib-'))
+    .map(c => ({
+      bibId: c.rawValue,
+      bbox:  c.boundingBox || { x: 0, y: 0, width: 0, height: 0 },
+    }));
+  lastBibs = bibs;
+  renderBibOverlays();
+}
+
+function renderBibOverlays() {
+  const container = $('bib-overlays');
+  container.innerHTML = '';
+  if (!cameraOn) return;
+  const vid = $('camera');
+  if (!vid.videoWidth || !vid.videoHeight) return;
+  // compute how the video is rendered (object-fit:cover)
+  const vw = vid.videoWidth, vh = vid.videoHeight;
+  const dw = window.innerWidth, dh = window.innerHeight;
+  const scale = Math.max(dw / vw, dh / vh);
+  const renderedW = vw * scale, renderedH = vh * scale;
+  const offX = (dw - renderedW) / 2, offY = (dh - renderedH) / 2;
+
+  for (const b of lastBibs) {
+    const x = offX + b.bbox.x * scale;
+    const y = offY + b.bbox.y * scale;
+    const w = b.bbox.width * scale;
+    const h = b.bbox.height * scale;
+    if (w < 20 || h < 20) continue;
+    const p = state?.players.find(pl => pl.bibId === b.bibId);
+    const myBib = me?.bibId;
+    const div = document.createElement('div');
+    div.className = 'bib-overlay';
+    if (aimedBib === b.bibId) div.classList.add('aimed');
+    if (b.bibId === myBib)    div.classList.add('me');
+    div.style.left = x + 'px'; div.style.top = y + 'px';
+    div.style.width = w + 'px'; div.style.height = h + 'px';
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.textContent = (p?.name || b.bibId) + (p ? (' · hp ' + p.hp) : '');
+    div.appendChild(tag);
+    if (b.bibId !== myBib) {
+      div.addEventListener('click', () => { aimedBib = b.bibId; updateFireBtnState(); });
+    }
+    container.appendChild(div);
+  }
+}
+
+function updateFireBtnState() {
+  const btn = $('fire-btn');
+  const canFire = aimedBib != null && (state?.phase === 'playing');
+  btn.disabled = !canFire;
+}
+
+// ─── render HUD ───────────────────────────────────────────
+function render() {
+  if (!state) return;
+
+  if (state.phase === 'lobby') {
+    if (me) {
+      $('lobby').style.display = 'flex';
+      $('lobby-wait').style.display = 'block';
+      $('lobby-countdown').style.display = 'none';
+      $('lobby-winner').style.display = 'none';
+      $('roster').innerHTML = state.players.map(p => `
+        <li>
+          <span style="width:12px;height:12px;background:${p.color};box-shadow:0 0 6px ${p.color};display:inline-block;border-radius:3px;"></span>
+          <span style="color:${p.id === me.id ? 'var(--cyan)' : 'var(--ink)'}">${escapeHtml(p.name)}${p.id === me.id ? ' (you)' : ''}</span>
+          <span class="ready">${p.ready ? '✓ READY' : '…'}</span>
+        </li>
+      `).join('');
+      const myP = state.players.find(p => p.id === me.id);
+      $('ready-btn').textContent = myP?.ready ? 'Un-ready' : 'Ready up';
+    }
+    return;
+  }
+
+  if (state.phase === 'countdown') {
+    $('lobby').style.display = 'flex';
+    $('lobby-wait').style.display = 'none';
+    $('lobby-countdown').style.display = 'block';
+    $('lobby-winner').style.display = 'none';
+    const left = Math.max(1, Math.ceil((state.countdownEndsAt - Date.now())/1000));
+    $('countdown-num').textContent = left;
+    return;
+  }
+
+  if (state.phase === 'playing') {
+    closeLobby();
+    $('top-phase').textContent = 'PLAYING · ' + fmtTimeLeft(state.matchEndsAt);
+
+    const myP = state.players.find(p => p.id === me?.id);
+    if (myP) {
+      $('hp-value').textContent = myP.hp;
+      $('hp-fill').style.width = myP.hp + '%';
+      $('health').classList.toggle('low', myP.hp < 30);
+      $('ammo-value').textContent = myP.reloading ? 'RELOAD' : `${myP.ammo} / 15`;
+      $('ammo').classList.toggle('reloading', myP.reloading);
+    }
+
+    // Target cards fallback (camera off)
+    if (!cameraOn) {
+      const targets = state.players.filter(p => p.id !== me?.id);
+      $('targets').innerHTML = targets.map(p => `
+        <div class="target-card ${!p.alive ? 'dead' : ''} ${aimedBib === p.bibId ? 'aimed' : ''}" data-bib="${p.bibId}">
+          <div class="color" style="background:${p.color};color:${p.color}"></div>
+          <div class="name">${escapeHtml(p.name)}</div>
+          <div class="bib">${p.bibId}</div>
+          <div class="hp">HP ${p.hp}</div>
+        </div>
+      `).join('');
+      $('targets').querySelectorAll('.target-card').forEach(card => {
+        card.addEventListener('click', () => {
+          if (card.classList.contains('dead')) return;
+          aimedBib = card.dataset.bib;
+          updateFireBtnState();
+          render();
+        });
+      });
+    }
+
+    // Scoreboard
+    const sorted = [...state.players].sort((a, b) => b.kills - a.kills);
+    $('score-body').innerHTML = sorted.map(p => `
+      <tr style="${!p.alive ? 'opacity:0.4' : ''}">
+        <td><span class="dot" style="background:${p.color};color:${p.color}"></span>${escapeHtml(p.name)}</td>
+        <td style="text-align:right;color:var(--cyan)">${p.kills}</td>
+        <td style="text-align:right;color:var(--ink-dim);font-size:9px;">${p.deaths}d</td>
+      </tr>
+    `).join('');
+
+    // Kill feed
+    const killFeed = (state.killFeed || []).slice(0, 5).map(k => {
+      const sh = state.players.find(p => p.id === k.shooterId);
+      const vi = state.players.find(p => p.id === k.victimId);
+      return `<li><span style="color:${sh?.color || 'var(--cyan)'}">${escapeHtml(sh?.name || '?')}</span>
+              → <span style="color:${vi?.color || 'var(--blood)'}">${escapeHtml(vi?.name || '?')}</span></li>`;
+    }).join('');
+    $('kill-feed-list').innerHTML = killFeed;
+
+    updateFireBtnState();
+    return;
+  }
+
+  if (state.phase === 'ended') {
+    $('lobby').style.display = 'flex';
+    $('lobby-wait').style.display = 'none';
+    $('lobby-countdown').style.display = 'none';
+    $('lobby-winner').style.display = 'block';
+    const w = state.players.find(p => p.id === state.winner);
+    const sorted = [...state.players].sort((a, b) => b.kills - a.kills);
+    const iWon = state.winner === me?.id;
+    $('winner-body').innerHTML = `
+      <div class="w ${iWon ? '' : 'loser'}">${iWon ? '★ YOU WIN' : (w ? escapeHtml(w.name) + ' WINS' : 'STALEMATE')}</div>
+      <table><thead><tr><th>Player</th><th>K</th><th>D</th></tr></thead>
+        <tbody>${sorted.map(p => `<tr><td><span class="dot" style="background:${p.color};display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;"></span>${escapeHtml(p.name)}</td><td style="text-align:right;color:var(--cyan)">${p.kills}</td><td style="text-align:right;color:var(--ink-dim)">${p.deaths}</td></tr>`).join('')}</tbody>
+      </table>
+    `;
+    return;
+  }
+}
+
+function fmtTimeLeft(end) {
+  const left = Math.max(0, end - Date.now());
+  return Math.floor(left/60000) + ':' + String(Math.floor(left/1000) % 60).padStart(2, '0');
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Live timer refresh
+setInterval(() => { if (state) render(); }, 500);
+
+// ─── fire ────────────────────────────────────────────────
+function fire() {
+  if (!aimedBib) return;
+  send({ type: 'fire', targetBib: aimedBib });
+  $('reticle').classList.add('hit');
+  setTimeout(() => $('reticle').classList.remove('hit'), 300);
+  haptic(30);
+}
+$('fire-btn').addEventListener('click', fire);
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); fire(); }
+});
+
+// ─── feedback handlers ───────────────────────────────────
+function onHit(m) { haptic(40); }
+function onKill(m) {
+  if (m.shooterId === me?.id) {
+    $('reticle').style.transform = 'translate(-50%,-50%) scale(1.2)';
+    haptic([40, 60, 80]);
+    setTimeout(() => { $('reticle').style.transform = 'translate(-50%,-50%)'; }, 200);
+  }
+}
+function onDamage(m) {
+  $('damage-flash').classList.add('active');
+  haptic([60, 40, 60]);
+  setTimeout(() => $('damage-flash').classList.remove('active'), 250);
+}
+function onRespawn(m) { if (m.playerId === me?.id) { aimedBib = null; updateFireBtnState(); } }
+function onReload() { /* via state */ }
+function onGameEnd(m) { /* via state */ }
+
+function haptic(p) { if (navigator.vibrate) navigator.vibrate(p); }
+
+// ─── compass / motion permission ──────────────────────────
+let compassReady = false;
+function maybeRequestMotion() {
+  if (compassReady) return;
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ — needs explicit user gesture
+    $('compass-perm-btn').classList.add('show');
+  } else {
+    // Android or older iOS — just listen
+    bindCompass();
+  }
+}
+$('compass-perm-btn').addEventListener('click', async () => {
+  try {
+    const res = await DeviceOrientationEvent.requestPermission();
+    if (res === 'granted') {
+      bindCompass();
+      $('compass-perm-btn').classList.remove('show');
+    } else {
+      toast('Compass permission denied', 'err', 3000);
+    }
+  } catch (e) {
+    toast('Compass failed: ' + e.message, 'err', 3000);
+  }
+});
+function bindCompass() {
+  compassReady = true;
+  window.addEventListener('deviceorientation', (e) => {
+    // iOS provides webkitCompassHeading (0-360, 0 = north)
+    // Android provides alpha (0-360 but direction meaning differs)
+    const heading = (e.webkitCompassHeading != null) ? e.webkitCompassHeading : (e.alpha != null ? (360 - e.alpha) : null);
+    if (heading == null) return;
+    const track = $('compass-track');
+    if (track) track.style.transform = `translateX(${-heading * 1.2}px)`;
+  });
+}
+
+// ─── boot ────────────────────────────────────────────────
+connect().catch(e => toast(e.message, 'err', 5000));
+</script>
+</body>
+</html>
