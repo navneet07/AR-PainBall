@@ -194,11 +194,42 @@
     box-shadow: inset 0 0 120px 30px rgba(255,48,64,0); transition: box-shadow 0.2s; }
   .damage-flash.active { box-shadow: inset 0 0 160px 40px rgba(255,48,64,0.7); }
 
-  /* Lobby overlay */
+  /* Lobby overlay — starts dark, becomes semi-transparent once camera is on */
   .overlay { position: fixed; inset: 0; background: rgba(10,6,18,0.85);
     backdrop-filter: blur(10px); z-index: 20;
     display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 20px; padding: 30px;
-    overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    transition: background 0.3s, backdrop-filter 0.3s; }
+  body.cam-on .overlay { background: rgba(10,6,18,0.55); backdrop-filter: blur(4px); }
+  body.cam-on .world-gradient { display: none; }
+
+  /* Prominent camera-enable button */
+  .cam-btn-big {
+    width: 100%; padding: 16px !important;
+    background: rgba(92,246,255,0.12) !important;
+    border: 2px solid var(--cyan) !important;
+    color: var(--cyan) !important;
+    font-size: 13px !important; letter-spacing: 0.22em !important;
+    box-shadow: 0 0 18px rgba(92,246,255,0.3);
+    margin-bottom: 12px !important;
+  }
+  .cam-btn-big.granted {
+    background: rgba(105,240,174,0.15) !important;
+    border-color: var(--green) !important;
+    color: var(--green) !important;
+    box-shadow: 0 0 18px rgba(105,240,174,0.3);
+  }
+
+  /* Small corner camera preview (shown in lobby when camera on, so user sees it's working) */
+  .cam-preview {
+    position: fixed; top: 10px; right: 10px; z-index: 25;
+    width: 100px; height: 64px; object-fit: cover;
+    border: 2px solid var(--green); border-radius: 4px;
+    box-shadow: 0 0 12px rgba(105,240,174,0.5);
+    display: none;
+  }
+  body.cam-on .cam-preview { display: block; }
+  body.cam-on.in-game .cam-preview { display: none; }
   .overlay .card { border: 1px solid var(--cyan); padding: 22px 26px; min-width: 300px;
     max-width: 420px; width: 100%; background: rgba(31,24,56,0.8); box-shadow: var(--glow); }
   .overlay h1 { color: var(--amethyst); margin: 0 0 18px; letter-spacing: 0.2em;
@@ -274,10 +305,10 @@
 <div class="overlay" id="lobby">
   <div class="card" id="lobby-join">
     <h1>GHOSTPAINT</h1>
+    <button class="cam-btn cam-btn-big">📷  Tap to enable camera</button>
     <input type="text" id="name-input" placeholder="Your callsign (3–12 chars)" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off"/>
     <input type="text" id="code-input" class="code-input" placeholder="Room code (blank = host)" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="off"/>
     <button id="join-btn">Create room</button>
-    <button class="ghost cam-btn">📷  Enable camera (for AR bibs)</button>
     <p style="font-size:11px;color:var(--ink-dim);margin-top:12px;text-align:center;line-height:1.5;">
       Host: leave code blank → you get a 6-digit code. Share it.<br>
       Guest: type the 6-digit code your host gave you.
@@ -520,6 +551,7 @@ function showLobbyWait() {
 
 function closeLobby() {
   $('lobby').style.display = 'none';
+  document.body.classList.add('in-game');
   $('top-bar').style.display = 'flex';
   $('compass').style.display = 'block';
   $('kill-feed-hud').style.display = 'block';
@@ -533,40 +565,60 @@ function closeLobby() {
   maybeRequestMotion();
 }
 
-// ─── camera permission (opt-in) ───────────────────────────
+// ─── camera permission ────────────────────────────────────
 document.querySelectorAll('.cam-btn').forEach(btn => {
   btn.addEventListener('click', enableCamera);
 });
 async function enableCamera() {
   if (cameraOn) return;
+  toast('Requesting camera…', 'info', 2500);
+
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast('This browser does not support camera access', 'err', 5000);
+    toast('❌ Browser too old or not HTTPS. Need iOS 14.3+ / modern Chrome.', 'err', 8000);
     return;
   }
+
+  let stream;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
+    // Try rear camera first, then any camera, then the most relaxed
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false,
+      });
+    } catch (e1) {
+      // fallback: any camera at all
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+  } catch (e) {
+    const msg =
+      e.name === 'NotAllowedError'   ? 'Camera DENIED. On iPhone: Settings → Safari → Camera → Allow. Then reload.' :
+      e.name === 'NotFoundError'     ? 'No camera found on this device.' :
+      e.name === 'NotReadableError'  ? 'Camera busy — close other camera apps (FaceTime, Instagram, etc).' :
+      e.name === 'SecurityError'     ? 'Security error — PWA must be served over HTTPS.' :
+      ('Camera error: ' + e.name + ' · ' + (e.message || '?'));
+    toast('❌ ' + msg, 'err', 10000);
+    return;
+  }
+
+  try {
     const vid = $('camera');
     vid.srcObject = stream;
     await vid.play();
     vid.classList.add('on');
     cameraOn = true;
+    document.body.classList.add('cam-on');
     document.querySelectorAll('.cam-btn').forEach(btn => {
       btn.textContent = '✓ Camera ON · AR bibs ready';
+      btn.classList.add('granted');
       btn.disabled = true;
-      btn.style.color = 'var(--green)';
-      btn.style.borderColor = 'var(--green)';
     });
     $('targets').style.display = 'none';
+    const track = stream.getVideoTracks()[0];
+    const label = track ? track.label.slice(0, 40) : 'camera';
+    toast('✓ Camera live — ' + label, 'info', 4000);
     startDetection();
-    toast('Camera ready · point at a bib to aim', 'info', 3000);
-  } catch (e) {
-    const msg = e.name === 'NotAllowedError'
-      ? 'Camera permission denied. Go to Settings → Safari → Camera and allow.'
-      : ('Camera error: ' + (e.message || e.name));
-    toast(msg, 'err', 6000);
+  } catch (playErr) {
+    toast('❌ Camera got permission but can\'t display: ' + playErr.message, 'err', 8000);
   }
 }
 
