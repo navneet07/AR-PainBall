@@ -3,23 +3,12 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"/>
-<title>GhostPaint · Zombies AR (3D)</title>
+<title>GhostPaint · Zombies AR</title>
 <link rel="manifest" href="manifest.webmanifest"/>
 <link rel="apple-touch-icon" href="icon-180.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#0a0612"/>
-
-<!-- Three.js as ES modules from CDN -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-  }
-}
-</script>
-
 <style>
   :root {
     --cyan: #5cf6ff; --amethyst: #c8a6ff; --blood: #ff3040;
@@ -45,13 +34,6 @@
   video.world-cam.on { display: block; }
   body.cam-on .world-gradient { opacity: 0.4; }
 
-  /* Three.js canvas overlay between camera and HUD */
-  #three-canvas {
-    position: fixed; inset: 0; z-index: 3;
-    width: 100vw; height: 100vh;
-    touch-action: none;
-  }
-
   /* Top HUD */
   .hud-top {
     position: fixed; top: 0; left: 0; right: 0; z-index: 10;
@@ -67,6 +49,7 @@
   .hud-top .heart { color: var(--blood); font-size: 16px; margin: 0 2px; text-shadow: 0 0 8px var(--blood); }
   .hud-top .heart.lost { color: rgba(255,48,64,0.15); text-shadow: none; }
 
+  /* Compass strip showing current heading */
   .compass-strip {
     position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
     width: min(420px, 90vw); height: 22px; z-index: 5;
@@ -79,6 +62,7 @@
   .compass-strip::before { content: "▼"; position: absolute; top: -10px; left: 50%;
     transform: translateX(-50%); color: var(--cyan); font-size: 10px; }
 
+  /* Off-screen zombie indicators */
   .edge-marker {
     position: fixed; z-index: 6; pointer-events: none;
     width: 50px; height: 50px;
@@ -95,6 +79,7 @@
     background: rgba(10,6,18,0.85); padding: 2px 6px; border: 1px solid var(--rot);
     color: var(--rot); border-radius: 2px; position: absolute; top: -4px; right: -8px; }
 
+  /* Wave banner */
   .wave-banner {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
     color: var(--gold); font-size: 56px; letter-spacing: 0.3em;
@@ -109,6 +94,7 @@
     100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05); }
   }
 
+  /* Reticle */
   .reticle {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 70px; height: 70px; z-index: 4; pointer-events: none;
@@ -149,6 +135,30 @@
   .damage-flash { position: fixed; inset: 0; pointer-events: none; z-index: 6;
     box-shadow: inset 0 0 120px 30px rgba(255,48,64,0); transition: box-shadow 0.2s; }
   .damage-flash.active { box-shadow: inset 0 0 200px 50px rgba(255,48,64,0.85); }
+
+  /* World-anchored zombies */
+  #zombies { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+  .zombie {
+    position: absolute; pointer-events: auto; cursor: crosshair;
+    will-change: transform;
+    transform-origin: center bottom;
+    animation: zombieIdle 1.4s ease-in-out infinite;
+  }
+  .zombie svg { width: 100%; height: 100%; display: block;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.7)) drop-shadow(0 0 6px rgba(109,255,126,0.4)); }
+  .zombie.dying {
+    animation: zombieDie 0.6s ease-out forwards !important;
+    pointer-events: none;
+  }
+  @keyframes zombieIdle {
+    0%,100% { filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(109,255,126,0.4)); }
+    50%     { filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(109,255,126,0.7)); }
+  }
+  @keyframes zombieDie {
+    0%   { opacity: 1; }
+    25%  { opacity: 1; filter: brightness(2.5) hue-rotate(40deg); }
+    100% { opacity: 0; transform: scale(0.5) translateY(40px) rotate(20deg); filter: brightness(0.3); }
+  }
 
   .hit-pop {
     position: fixed; pointer-events: none; z-index: 9;
@@ -203,34 +213,26 @@
     text-decoration: none; padding: 4px 10px; background: rgba(0,0,0,0.5);
     border: 1px solid rgba(139,134,179,0.3); border-radius: 3px;
   }
-  .fallback-link {
-    color: var(--cyan); font-size: 11px; text-align: center;
-    display: block; margin-top: 8px; text-decoration: none;
-    letter-spacing: 0.15em;
-  }
-  .loader-text { color: var(--rot); font-size: 11px; text-align: center;
-    margin-top: 8px; letter-spacing: 0.18em; min-height: 16px; }
 </style>
 </head>
 <body>
 
 <div class="world-gradient"></div>
 <video id="camera" class="world-cam" autoplay playsinline muted></video>
-<canvas id="three-canvas"></canvas>
 
+<!-- Start screen -->
 <div class="overlay" id="start-overlay">
   <div class="card">
     <img src="icon.svg" alt="" style="display:block;margin:-6px auto 8px;width:120px;height:120px;filter:drop-shadow(0 0 24px rgba(109,255,126,0.5));"/>
-    <h1>ZOMBIES · 3D AR</h1>
-    <p>Real 3D zombies anchored to compass directions. <strong>Pan your phone</strong> to find them. They walk toward you. Tap to kill, or center reticle + FIRE.</p>
+    <h1>ZOMBIES · AR</h1>
+    <p>World-anchored zombies. They spawn in compass directions around you. <strong>Pan your phone</strong> to find them — green ◀ ▶ markers point to off-screen zombies. Tap to kill, or center reticle + FIRE.</p>
     <button id="enable-cam-btn">📷  ENABLE CAMERA</button>
-    <button id="enable-motion-btn">🧭  ENABLE MOTION</button>
+    <button id="enable-motion-btn">🧭  ENABLE MOTION (compass)</button>
     <button id="start-btn" disabled>BEGIN HUNT</button>
-    <div class="loader-text" id="loader-text"></div>
-    <a class="fallback-link" href="zombies-2d.html">← 3D not working? Try the 2D version</a>
   </div>
 </div>
 
+<!-- Game over -->
 <div class="overlay" id="end-overlay" style="display:none;">
   <div class="card">
     <h1 id="end-title">YOU DIED</h1>
@@ -241,6 +243,7 @@
   </div>
 </div>
 
+<!-- HUD -->
 <div class="hud-top" id="hud" style="display:none;">
   <span><span class="label">SCORE</span><span class="num" id="hud-score">0</span></span>
   <span><span class="label">WAVE</span><span class="num" id="hud-wave">1</span></span>
@@ -251,6 +254,7 @@
   <div class="compass-track" id="compass-track">W  ·  ·  ·  NW  ·  ·  ·  N  ·  ·  ·  NE  ·  ·  ·  E  ·  ·  ·  SE  ·  ·  ·  S  ·  ·  ·  SW  ·  ·  ·  W</div>
 </div>
 
+<div id="zombies"></div>
 <div id="edge-markers"></div>
 
 <div class="reticle" id="reticle" style="display:none;">
@@ -262,41 +266,65 @@
 <button id="fire-btn" class="fire-btn" style="display:none;">FIRE</button>
 <a class="back-link" href="./">← LOBBY</a>
 
-<script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
+<!-- Zombie SVG template -->
+<svg id="zombie-svg-template" style="display:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 110">
+  <defs>
+    <radialGradient id="zEye" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#6dff7e"/>
+      <stop offset="100%" stop-color="#6dff7e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="zHood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a4a3f"/>
+      <stop offset="100%" stop-color="#1a2218"/>
+    </linearGradient>
+  </defs>
+  <path d="M 25 30 Q 15 20, 30 12 Q 45 4, 60 12 Q 75 20, 65 32
+           L 70 70 Q 75 95, 60 100 Q 45 105, 30 100 Q 15 95, 20 70 Z"
+        fill="url(#zHood)" stroke="#0a140a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M 30 100 L 35 108 L 40 100 L 45 110 L 50 100 L 55 108 L 60 100"
+        fill="none" stroke="#0a140a" stroke-width="2"/>
+  <ellipse cx="45" cy="35" rx="20" ry="18" fill="#040804"/>
+  <circle cx="36" cy="33" r="9" fill="url(#zEye)"/>
+  <circle cx="36" cy="33" r="3" fill="#ffffff"/>
+  <circle cx="54" cy="33" r="9" fill="url(#zEye)"/>
+  <circle cx="54" cy="33" r="3" fill="#ffffff"/>
+  <path d="M 36 50 L 39 52 L 42 50 L 45 53 L 48 50 L 51 52 L 54 50" stroke="#0a140a" stroke-width="2" fill="none"/>
+</svg>
 
+<script>
 // ═══════════════════════════════════════════════════════════
-//  GhostPaint Zombies · 3D AR
-//  Real glTF zombies (Quaternius, CC0) rendered via Three.js
-//  in a transparent canvas overlay above the camera feed.
-//  Heading-based positioning: each zombie sits in a compass
-//  direction, you pan the phone to find them. They walk toward
-//  the camera; reaching you costs a life.
+//  GhostPaint Zombies AR · world-anchored via device heading
+// ═══════════════════════════════════════════════════════════
+//
+//  Each zombie has a worldHeading (0-360 degrees, like a compass
+//  bearing) and a worldPitch (vertical look angle). As the user
+//  rotates the phone, we recompute each zombie's screen position
+//  from the difference between its world heading and the phone's
+//  current heading. Zombies that fall outside the viewport get an
+//  edge marker showing which direction to pan.
+//
+//  Distance is faked by scaling — closer zombies render bigger.
+//  Distance shrinks over time; when it hits zero, the zombie has
+//  "reached you" and you lose a life.
 // ═══════════════════════════════════════════════════════════
 
-const $ = (id) => document.getElementById(id);
-
-// Phone orientation (degrees)
-let currentHeading = 0;     // 0 = north
-let currentPitch = 0;       // 0 = horizontal, +90 = pointing up
-
-let cameraOn = false, motionOn = false, modelReady = false;
+let cameraOn = false, motionOn = false;
 let game = null;
 let bestScore = Number(localStorage.getItem('gp-zombies-best') || 0);
 
-// Three.js scene
-let renderer, scene, camera3d, raycaster;
-let zombieGltf = null;       // template GLB (cloned per zombie)
-let lastFrameTime = 0;
+// Phone's current orientation (degrees)
+let currentHeading = 0;     // 0 = north
+let currentPitch = 0;       // 0 = horizontal, +90 = pointing up
+let baselineHeading = null; // first reading; we anchor world to this
 
+const $ = (id) => document.getElementById(id);
+
+// FOV approximation — typical phone rear camera
 const HORIZ_FOV_DEG = 65;
 const VERT_FOV_DEG  = 50;
 
-const tapVec = new THREE.Vector2();
-
-// ─── camera permission ────────────────────────────────────
+// ─── camera ────────────────────────────────────────────────
 $('enable-cam-btn').addEventListener('click', enableCamera);
 async function enableCamera() {
   if (cameraOn) return;
@@ -322,7 +350,7 @@ async function enableCamera() {
   }
 }
 
-// ─── motion permission ────────────────────────────────────
+// ─── motion / heading ──────────────────────────────────────
 $('enable-motion-btn').addEventListener('click', enableMotion);
 async function enableMotion() {
   if (motionOn) return;
@@ -343,76 +371,31 @@ async function enableMotion() {
 }
 
 function onOrientation(e) {
+  // iOS provides webkitCompassHeading (true compass, 0=north)
+  // Android provides alpha (0-360, but device-rotation-relative)
   const heading = (e.webkitCompassHeading != null)
     ? e.webkitCompassHeading
     : (e.alpha != null ? (360 - e.alpha) : null);
   if (heading == null) return;
+  if (baselineHeading == null) baselineHeading = heading;
   currentHeading = heading;
-  currentPitch = e.beta != null ? (e.beta - 90) : 0;
+  currentPitch = e.beta != null ? (e.beta - 90) : 0;  // 0 = phone held vertical, looking forward
+  updateCompassStrip();
+}
+
+function updateCompassStrip() {
   const t = $('compass-track');
   if (t) t.style.transform = `translateX(${-currentHeading * 1.2}px)`;
 }
 
-// ─── Three.js init + GLB load (runs on page load) ──────────
-async function initThree() {
-  try {
-    setLoader('Initializing 3D engine…');
-    const canvas = $('three-canvas');
-    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-
-    scene = new THREE.Scene();
-    // Greenish-amethyst fog so distant zombies fade in moodily
-    scene.fog = new THREE.Fog(0x0a0612, 4, 14);
-
-    camera3d = new THREE.PerspectiveCamera(HORIZ_FOV_DEG, window.innerWidth/window.innerHeight, 0.05, 100);
-    camera3d.position.set(0, 1.5, 0); // 1.5m above ground
-    camera3d.rotation.order = 'YXZ';  // yaw first, then pitch
-
-    // Lighting — punchy enough to read on any phone
-    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-    const key = new THREE.DirectionalLight(0xc8a6ff, 1.2);
-    key.position.set(2, 5, 3);
-    scene.add(key);
-    const rim = new THREE.DirectionalLight(0x5cf6ff, 0.6);
-    rim.position.set(-3, 2, -4);
-    scene.add(rim);
-
-    raycaster = new THREE.Raycaster();
-
-    window.addEventListener('resize', onResize);
-    onResize();
-
-    setLoader('Loading zombie model (~700 KB)…');
-    const loader = new GLTFLoader();
-    zombieGltf = await loader.loadAsync('models/zombie.glb');
-    modelReady = true;
-    setLoader('✓ Ready · enable camera + motion to play');
-    maybeReadyToStart();
-  } catch (e) {
-    console.error('Three.js init failed', e);
-    setLoader('⚠ 3D init failed: ' + e.message + ' — try the 2D version');
-  }
-}
-
-function setLoader(text) { $('loader-text').textContent = text; }
-
-function onResize() {
-  if (!renderer || !camera3d) return;
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera3d.aspect = window.innerWidth / window.innerHeight;
-  camera3d.updateProjectionMatrix();
-}
-
 function maybeReadyToStart() {
-  if (cameraOn && motionOn && modelReady) $('start-btn').disabled = false;
+  if (cameraOn && motionOn) $('start-btn').disabled = false;
 }
 
 $('start-btn').addEventListener('click', startGame);
 $('restart-btn').addEventListener('click', () => { $('end-overlay').style.display = 'none'; startGame(); });
 
-// ─── game loop ────────────────────────────────────────────
+// ─── game ──────────────────────────────────────────────────
 function startGame() {
   $('start-overlay').style.display = 'none';
   $('end-overlay').style.display = 'none';
@@ -420,14 +403,13 @@ function startGame() {
   $('compass-strip').style.display = 'block';
   $('reticle').style.display = 'block';
   $('fire-btn').style.display = 'block';
-
-  // Clear any leftover zombies
-  if (game) for (const [, z] of game.zombies) scene.remove(z.model);
+  document.getElementById('zombies').innerHTML = '';
+  document.getElementById('edge-markers').innerHTML = '';
 
   game = {
     score: 0, wave: 0, lives: 3,
     zombies: new Map(),
-    nextId: 1,
+    nextZombieId: 1,
     spawnTimer: null,
     waveTimer: null,
     over: false,
@@ -435,8 +417,8 @@ function startGame() {
   };
   renderHud();
   beginNextWave();
-  lastFrameTime = performance.now();
-  game.rafLoop = requestAnimationFrame(renderLoop);
+  // World render loop — recomputes screen positions every frame
+  game.rafLoop = requestAnimationFrame(renderWorld);
 }
 
 function beginNextWave() {
@@ -445,149 +427,133 @@ function beginNextWave() {
   game.killsThisWave = 0;
   showWaveBanner('WAVE ' + game.wave);
   renderHud();
+
   const spawnIntervalMs = Math.max(900, 4500 - game.wave * 380);
-  const approachMs      = Math.max(8000, 22000 - game.wave * 1100);
+  const approachMs      = Math.max(7000, 18000 - game.wave * 900);
+
   clearInterval(game.spawnTimer);
   game.spawnTimer = setInterval(() => spawnZombie(approachMs), spawnIntervalMs);
   clearTimeout(game.waveTimer);
-  game.waveTimer = setTimeout(beginNextWave, 30000);
+  game.waveTimer = setTimeout(beginNextWave, 28000);
 }
 
 function spawnZombie(approachMs) {
-  if (!game || game.over || !zombieGltf) return;
-
-  const id = game.nextId++;
-  // 70% in front of player view, 30% behind
+  if (!game || game.over) return;
+  const id = game.nextZombieId++;
+  // World heading: anywhere on the compass, slight bias toward player's current view
+  // 70% chance within ±90° of current view, 30% behind
   const inFront = Math.random() < 0.7;
-  const offset = inFront
-    ? (Math.random() - 0.5) * 180
-    : (Math.random() < 0.5 ? 1 : -1) * (90 + Math.random() * 90);
+  const offset = inFront ? (Math.random() - 0.5) * 180 : (Math.random() < 0.5 ? 1 : -1) * (90 + Math.random() * 90);
   const worldHeading = ((currentHeading + offset) % 360 + 360) % 360;
+  const worldPitch = (Math.random() - 0.5) * 20;  // ±10° from horizon
 
-  // Clone model (skeletal — must use SkeletonUtils.clone)
-  const model = SkeletonUtils.clone(zombieGltf.scene);
-  // Quaternius zombies tend to be ~1.7m. Scale slightly for AR.
-  model.scale.set(0.6, 0.6, 0.6);
-  model.traverse((o) => {
-    if (o.isMesh) {
-      o.frustumCulled = true;
-      // Make material instances unique so we can fade them per-instance
-      if (o.material) o.material = o.material.clone();
-    }
-  });
-  scene.add(model);
-
-  // Animation mixer + walk loop
-  const mixer = new THREE.AnimationMixer(model);
-  const walk = THREE.AnimationClip.findByName(zombieGltf.animations, 'ZombieWalk')
-            || THREE.AnimationClip.findByName(zombieGltf.animations, 'Walk')
-            || zombieGltf.animations[0];
-  if (walk) mixer.clipAction(walk).play();
+  const tpl = $('zombie-svg-template');
+  const el = document.createElement('div');
+  el.className = 'zombie';
+  el.dataset.id = id;
+  el.innerHTML = tpl.outerHTML.replace(/style="display:none;"/, '').replace(/id="zombie-svg-template"/, '');
+  el.addEventListener('click', () => killZombie(id, true));
+  document.getElementById('zombies').appendChild(el);
 
   game.zombies.set(id, {
-    id, model, mixer,
+    el,
     worldHeading,
+    worldPitch,
     distance: 1.0,             // 1.0 = far, 0 = at you
-    spawnedAt: performance.now(),
+    spawnedAt: Date.now(),
     approachMs,
     dying: false,
-    dyingStart: 0,
-    screenX: 0, screenY: 0,    // updated each frame for muzzle/hit pop placement
+    screenX: 0, screenY: 0,    // updated each frame
   });
 }
 
-function renderLoop(now) {
-  if (!game) return;
-  const dt = Math.min(0.1, (now - lastFrameTime) / 1000);  // seconds, clamped
-  lastFrameTime = now;
-
-  // Camera rotation from phone orientation
-  // YXZ order with yaw=heading, pitch=pitch — negate heading because compass goes clockwise
-  camera3d.rotation.set(
-    THREE.MathUtils.degToRad(Math.max(-60, Math.min(60, currentPitch))),
-    THREE.MathUtils.degToRad(-currentHeading),
-    0
-  );
-
+function renderWorld() {
+  if (!game || game.over) return;
+  const now = Date.now();
   const W = window.innerWidth, H = window.innerHeight;
-  const edgeMarkers = $('edge-markers');
-  if (!game.over) edgeMarkers.innerHTML = '';
+  const pxPerDegX = W / HORIZ_FOV_DEG;
+  const pxPerDegY = H / VERT_FOV_DEG;
+  const edgeMarkers = document.getElementById('edge-markers');
+  edgeMarkers.innerHTML = '';
   const offscreenByEdge = { left: 0, right: 0, top: 0, bottom: 0 };
 
   for (const [id, z] of game.zombies) {
-    if (z.dying) {
-      // Death tween: scale down, sink, fade
-      const t = Math.min(1, (now - z.dyingStart) / 800);
-      const s = 0.6 * (1 - t * 0.6);
-      z.model.scale.set(s, s, s);
-      z.model.position.y = -t * 1.5;
-      z.model.traverse((o) => {
-        if (o.isMesh && o.material) {
-          o.material.transparent = true;
-          o.material.opacity = 1 - t;
-        }
-      });
-      z.mixer && z.mixer.update(dt);
-      if (t >= 1) {
-        scene.remove(z.model);
-        game.zombies.delete(id);
-      }
+    if (z.dying) continue;
+
+    // Approach: distance shrinks linearly from 1.0 → 0 over approachMs
+    const t = (now - z.spawnedAt) / z.approachMs;
+    z.distance = Math.max(0, 1 - t);
+
+    if (z.distance <= 0) { onZombieReach(id); continue; }
+
+    // Heading delta — shortest signed angle between world and current
+    let dh = z.worldHeading - currentHeading;
+    while (dh > 180)  dh -= 360;
+    while (dh < -180) dh += 360;
+    const dp = z.worldPitch - currentPitch;
+
+    // Project onto screen
+    const screenX = W/2 + dh * pxPerDegX;
+    const screenY = H/2 - dp * pxPerDegY;
+    z.screenX = screenX; z.screenY = screenY;
+
+    // Distance-based scale (closer = bigger)
+    const baseSize = 110;
+    const scale = 0.4 + (1 - z.distance) * 1.4;   // 0.4 at far, 1.8 at point-blank
+    const w = baseSize * scale;
+    const h = baseSize * 1.22 * scale;
+
+    // Behind player? (heading delta > 90°)
+    const behind = Math.abs(dh) > 90;
+
+    if (behind) {
+      // Don't render the sprite, but show an edge indicator
+      z.el.style.display = 'none';
+      // Pick edge based on dh sign
+      if (dh > 0) offscreenByEdge.right++; else offscreenByEdge.left++;
       continue;
     }
 
-    // Approach
-    const elapsed = now - z.spawnedAt;
-    z.distance = Math.max(0, 1 - elapsed / z.approachMs);
-    if (z.distance <= 0) { onZombieReach(id); continue; }
+    // On-screen test (bbox vs viewport)
+    const left = screenX - w/2, top = screenY - h/2;
+    const onscreen = (left + w > 0 && left < W && top + h > 0 && top < H);
+    if (!onscreen) {
+      z.el.style.display = 'none';
+      // Edge indicator
+      if (left + w <= 0) offscreenByEdge.left++;
+      else if (left >= W) offscreenByEdge.right++;
+      else if (top + h <= 0) offscreenByEdge.top++;
+      else if (top >= H) offscreenByEdge.bottom++;
+      continue;
+    }
 
-    // Position in world coords on a circle around the camera
-    const dist = 2 + z.distance * 9;   // 2-11m
-    const headingRad = THREE.MathUtils.degToRad(z.worldHeading);
-    const x = Math.sin(headingRad) * dist;
-    const zCoord = -Math.cos(headingRad) * dist;
-    z.model.position.set(x, 0, zCoord);
-
-    // Face the camera (only Y rotation — keep upright)
-    z.model.lookAt(camera3d.position.x, 0, camera3d.position.z);
-
-    z.mixer && z.mixer.update(dt);
-
-    // Compute screen position for muzzle/hit-pop (project model center)
-    const worldPos = z.model.position.clone(); worldPos.y = 0.8;
-    const projected = worldPos.project(camera3d);
-    z.screenX = (projected.x * 0.5 + 0.5) * W;
-    z.screenY = (-projected.y * 0.5 + 0.5) * H;
-
-    // Off-screen detection (z>1 = behind camera, |x|>1 or |y|>1 = outside frustum)
-    if (projected.z > 1) {
-      // Behind player — mark side based on heading delta
-      let dh = z.worldHeading - currentHeading;
-      while (dh > 180) dh -= 360; while (dh < -180) dh += 360;
-      if (dh > 0) offscreenByEdge.right++; else offscreenByEdge.left++;
-    } else if (projected.x < -1.05) offscreenByEdge.left++;
-    else if (projected.x > 1.05) offscreenByEdge.right++;
-    else if (projected.y > 1.05) offscreenByEdge.top++;
-    else if (projected.y < -1.05) offscreenByEdge.bottom++;
+    // Render
+    z.el.style.display = 'block';
+    z.el.style.width = w + 'px';
+    z.el.style.height = h + 'px';
+    z.el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
   }
 
+  // Render edge markers
   if (offscreenByEdge.left)  edgeMarkers.appendChild(makeEdgeMarker('left', offscreenByEdge.left));
   if (offscreenByEdge.right) edgeMarkers.appendChild(makeEdgeMarker('right', offscreenByEdge.right));
   if (offscreenByEdge.top)   edgeMarkers.appendChild(makeEdgeMarker('top', offscreenByEdge.top));
-  if (offscreenByEdge.bottom)edgeMarkers.appendChild(makeEdgeMarker('bottom', offscreenByEdge.bottom));
+  if (offscreenByEdge.bottom) edgeMarkers.appendChild(makeEdgeMarker('bottom', offscreenByEdge.bottom));
 
-  renderer.render(scene, camera3d);
-  game.rafLoop = requestAnimationFrame(renderLoop);
+  game.rafLoop = requestAnimationFrame(renderWorld);
 }
 
 function makeEdgeMarker(edge, count) {
   const m = document.createElement('div');
   m.className = 'edge-marker';
-  m.textContent = { left: '◀', right: '▶', top: '▲', bottom: '▼' }[edge];
+  const arrow = { left: '◀', right: '▶', top: '▲', bottom: '▼' }[edge];
+  m.textContent = arrow;
   if (count > 1) {
     const c = document.createElement('span');
     c.className = 'count'; c.textContent = count;
     m.appendChild(c);
   }
+  // Position on edge, vertically/horizontally centered
   if (edge === 'left')   { m.style.left = '8px'; m.style.top = '50%'; m.style.transform = 'translateY(-50%)'; }
   if (edge === 'right')  { m.style.right = '8px'; m.style.top = '50%'; m.style.transform = 'translateY(-50%)'; }
   if (edge === 'top')    { m.style.top = '80px'; m.style.left = '50%'; m.style.transform = 'translateX(-50%)'; }
@@ -595,56 +561,18 @@ function makeEdgeMarker(edge, count) {
   return m;
 }
 
-// ─── tap detection (raycaster) ────────────────────────────
-$('three-canvas').addEventListener('click', (e) => {
-  if (!game || game.over) return;
-  hitscan(e.clientX, e.clientY, true);
-});
-
-function hitscan(screenX, screenY, byTap) {
-  tapVec.x = (screenX / window.innerWidth) * 2 - 1;
-  tapVec.y = -(screenY / window.innerHeight) * 2 + 1;
-  raycaster.setFromCamera(tapVec, camera3d);
-
-  const candidates = [];
-  for (const [id, z] of game.zombies) {
-    if (z.dying) continue;
-    z.model.traverse((o) => {
-      if (o.isMesh) { o.userData.zombieId = id; candidates.push(o); }
-    });
-  }
-  const hits = raycaster.intersectObjects(candidates, true);
-  if (hits.length > 0) {
-    let id = null;
-    let obj = hits[0].object;
-    while (obj && id == null) { id = obj.userData.zombieId; obj = obj.parent; }
-    if (id != null) killZombie(id, byTap);
-  } else {
-    // Miss: just muzzle burst at tap point
-    muzzleBurst(screenX, screenY);
-  }
-}
-
 function killZombie(id, byTap) {
   const z = game?.zombies.get(id);
   if (!z || z.dying) return;
   z.dying = true;
-  z.dyingStart = performance.now();
-  // Bite/death-throes animation if available
-  const death = THREE.AnimationClip.findByName(zombieGltf.animations, 'ZombieBite')
-             || THREE.AnimationClip.findByName(zombieGltf.animations, 'Bite');
-  if (death && z.mixer) {
-    z.mixer.stopAllAction();
-    const a = z.mixer.clipAction(death);
-    a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true;
-    a.play();
-  }
+  z.el.classList.add('dying');
   muzzleBurst(z.screenX, z.screenY);
   showHitPop(z.screenX, z.screenY, byTap ? '+10' : '+15');
   game.score += byTap ? 10 : 15;
   game.killsThisWave++;
   renderHud();
   haptic(40);
+  setTimeout(() => { z.el.remove(); game.zombies.delete(id); }, 600);
   if (game.killsThisWave >= 12 + game.wave * 2) {
     clearTimeout(game.waveTimer);
     game.waveTimer = setTimeout(beginNextWave, 1500);
@@ -654,7 +582,7 @@ function killZombie(id, byTap) {
 function onZombieReach(id) {
   const z = game?.zombies.get(id);
   if (!z || z.dying) return;
-  scene.remove(z.model);
+  z.el.remove();
   game.zombies.delete(id);
   game.lives--;
   flashDamage();
@@ -668,8 +596,8 @@ function endGame() {
   clearInterval(game.spawnTimer);
   clearTimeout(game.waveTimer);
   cancelAnimationFrame(game.rafLoop);
-  for (const [, z] of game.zombies) { scene.remove(z.model); }
-  game.zombies.clear();
+  for (const [, z] of game.zombies) z.el.classList.add('dying');
+  setTimeout(() => document.getElementById('zombies').innerHTML = '', 700);
   if (game.score > bestScore) {
     bestScore = game.score;
     localStorage.setItem('gp-zombies-best', String(bestScore));
@@ -684,7 +612,7 @@ function endGame() {
   $('end-overlay').style.display = 'flex';
 }
 
-// ─── HUD ──────────────────────────────────────────────────
+// ─── HUD ────────────────────────────────────────────────────
 function renderHud() {
   if (!game) return;
   $('hud-score').textContent = game.score;
@@ -707,15 +635,24 @@ function showWaveBanner(text) {
   setTimeout(() => b.remove(), 2100);
 }
 
-// ─── FIRE button → raycaster from screen center ──────────
+// ─── FIRE button = kill zombie nearest to reticle (screen center) ──
 $('fire-btn').addEventListener('click', () => {
   if (!game || game.over) return;
+  const cx = window.innerWidth/2, cy = window.innerHeight/2;
+  let nearest = null, nearestDist = Infinity;
+  for (const [id, z] of game.zombies) {
+    if (z.dying || z.el.style.display === 'none') continue;
+    const dx = z.screenX - cx, dy = z.screenY - cy;
+    const d = Math.sqrt(dx*dx + dy*dy);
+    if (d < 160 && d < nearestDist) { nearestDist = d; nearest = id; }
+  }
   $('reticle').classList.add('firing');
   setTimeout(() => $('reticle').classList.remove('firing'), 200);
-  hitscan(window.innerWidth/2, window.innerHeight/2, false);
+  if (nearest != null) killZombie(nearest, false);
+  else { muzzleBurst(cx, cy); haptic(20); }
 });
 
-// ─── visual effects ──────────────────────────────────────
+// ─── effects ───────────────────────────────────────────────
 function muzzleBurst(x, y) {
   const burst = document.createElement('div');
   burst.className = 'muzzle-burst';
@@ -746,10 +683,6 @@ function flashDamage() {
 }
 
 function haptic(p) { if (navigator.vibrate) navigator.vibrate(p); }
-
-// Boot — kick off Three.js init right away (the GLB load can run while the
-// user fills in camera + motion permissions in parallel).
-initThree();
 </script>
 </body>
 </html>
