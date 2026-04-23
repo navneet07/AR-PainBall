@@ -10,14 +10,27 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#0a0612"/>
 
-<!-- Three.js as ES modules from CDN -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+<!-- Visible error overlay (loads BEFORE the ESM module so we can see ESM/network errors too) -->
+<script>
+(function () {
+  function showError(label, msg) {
+    const id = '__err_' + Date.now();
+    const div = document.createElement('div');
+    div.id = id;
+    div.style.cssText = 'position:fixed;left:0;right:0;background:rgba(180,0,0,0.95);color:#fff;padding:8px 12px;z-index:99999;font-family:monospace;font-size:11px;line-height:1.4;border-top:1px solid #ff3040;text-align:left;word-break:break-word;';
+    div.style.bottom = ((document.querySelectorAll('[id^="__err_"]').length) * 56) + 'px';
+    div.textContent = '[' + label + '] ' + msg;
+    div.addEventListener('click', () => div.remove());
+    (document.body || document.documentElement).appendChild(div);
   }
-}
+  window.__showError = showError;
+  window.addEventListener('error', (e) => {
+    showError('JS', (e.message || 'unknown') + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    showError('PROMISE', (e.reason && e.reason.message) ? e.reason.message : String(e.reason || 'unknown'));
+  });
+})();
 </script>
 
 <style>
@@ -262,10 +275,90 @@
 <button id="fire-btn" class="fire-btn" style="display:none;">FIRE</button>
 <a class="back-link" href="./">← LOBBY</a>
 
+<!-- Permission handlers live OUTSIDE the ESM module so they work even if
+     Three.js fails to load (e.g., on iOS without importmap support). -->
+<script>
+window.gpz = window.gpz || {
+  cameraOn: false, motionOn: false, modelReady: false,
+  currentHeading: 0, currentPitch: 0,
+  // Hooks set by the module:
+  onCamReady: () => {},
+  onMotionReady: () => {},
+};
+
+document.getElementById('enable-cam-btn').addEventListener('click', async () => {
+  if (window.gpz.cameraOn) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    window.__showError('CAM', 'Browser too old or not HTTPS — needs iOS 14.3+ or modern Chrome');
+    return;
+  }
+  try {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false,
+      });
+    } catch (e1) {
+      // fallback to ANY camera
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+    const vid = document.getElementById('camera');
+    vid.srcObject = stream;
+    await vid.play();
+    vid.classList.add('on');
+    window.gpz.cameraOn = true;
+    document.body.classList.add('cam-on');
+    const btn = document.getElementById('enable-cam-btn');
+    btn.textContent = '✓ CAMERA ON';
+    btn.disabled = true;
+    btn.style.color = 'var(--rot)';
+    window.gpz.onCamReady();
+  } catch (e) {
+    const msg = e.name === 'NotAllowedError'
+      ? 'Camera DENIED. Settings → Safari → Camera → Allow, then reload.'
+      : e.name === 'NotFoundError' ? 'No camera on this device'
+      : e.name === 'NotReadableError' ? 'Camera busy — close other apps using it'
+      : 'Camera error: ' + e.name + ' · ' + (e.message || '?');
+    window.__showError('CAM', msg);
+  }
+});
+
+document.getElementById('enable-motion-btn').addEventListener('click', async () => {
+  if (window.gpz.motionOn) return;
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') { window.__showError('MOTION', 'Permission denied'); return; }
+    }
+    window.addEventListener('deviceorientation', (e) => {
+      const heading = (e.webkitCompassHeading != null)
+        ? e.webkitCompassHeading
+        : (e.alpha != null ? (360 - e.alpha) : null);
+      if (heading == null) return;
+      window.gpz.currentHeading = heading;
+      window.gpz.currentPitch = e.beta != null ? (e.beta - 90) : 0;
+      const t = document.getElementById('compass-track');
+      if (t) t.style.transform = 'translateX(' + (-heading * 1.2) + 'px)';
+    }, true);
+    window.gpz.motionOn = true;
+    const btn = document.getElementById('enable-motion-btn');
+    btn.textContent = '✓ MOTION ON';
+    btn.disabled = true;
+    btn.style.color = 'var(--rot)';
+    window.gpz.onMotionReady();
+  } catch (e) {
+    window.__showError('MOTION', e.message || String(e));
+  }
+});
+</script>
+
+<!-- Three.js + GLB loader. Uses esm.sh which auto-rewrites bare imports
+     inside the addons, so we don't need importmap (which is iOS 16.4+ only). -->
 <script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
+import * as THREE from 'https://esm.sh/three@0.160.0';
+import { GLTFLoader } from 'https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import { SkeletonUtils } from 'https://esm.sh/three@0.160.0/examples/jsm/utils/SkeletonUtils.js';
 
 // ═══════════════════════════════════════════════════════════
 //  GhostPaint Zombies · 3D AR
@@ -278,11 +371,12 @@ import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
 
 const $ = (id) => document.getElementById(id);
 
-// Phone orientation (degrees)
-let currentHeading = 0;     // 0 = north
-let currentPitch = 0;       // 0 = horizontal, +90 = pointing up
+// Permissions / motion state are owned by the non-module script (window.gpz).
+// Hook into its readiness signals.
+window.gpz.onCamReady = () => maybeReadyToStart();
+window.gpz.onMotionReady = () => maybeReadyToStart();
 
-let cameraOn = false, motionOn = false, modelReady = false;
+let modelReady = false;
 let game = null;
 let bestScore = Number(localStorage.getItem('gp-zombies-best') || 0);
 
@@ -295,63 +389,6 @@ const HORIZ_FOV_DEG = 65;
 const VERT_FOV_DEG  = 50;
 
 const tapVec = new THREE.Vector2();
-
-// ─── camera permission ────────────────────────────────────
-$('enable-cam-btn').addEventListener('click', enableCamera);
-async function enableCamera() {
-  if (cameraOn) return;
-  if (!navigator.mediaDevices?.getUserMedia) {
-    alert('No camera in this browser.'); return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-      audio: false,
-    });
-    const vid = $('camera');
-    vid.srcObject = stream;
-    await vid.play();
-    vid.classList.add('on');
-    cameraOn = true;
-    document.body.classList.add('cam-on');
-    $('enable-cam-btn').textContent = '✓ CAMERA ON';
-    $('enable-cam-btn').disabled = true;
-    maybeReadyToStart();
-  } catch (e) {
-    alert('Camera denied. Settings → Safari → Camera → Allow.');
-  }
-}
-
-// ─── motion permission ────────────────────────────────────
-$('enable-motion-btn').addEventListener('click', enableMotion);
-async function enableMotion() {
-  if (motionOn) return;
-  try {
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      const res = await DeviceOrientationEvent.requestPermission();
-      if (res !== 'granted') { alert('Motion permission denied'); return; }
-    }
-    window.addEventListener('deviceorientation', onOrientation, true);
-    motionOn = true;
-    $('enable-motion-btn').textContent = '✓ MOTION ON';
-    $('enable-motion-btn').disabled = true;
-    maybeReadyToStart();
-  } catch (e) {
-    alert('Motion error: ' + e.message);
-  }
-}
-
-function onOrientation(e) {
-  const heading = (e.webkitCompassHeading != null)
-    ? e.webkitCompassHeading
-    : (e.alpha != null ? (360 - e.alpha) : null);
-  if (heading == null) return;
-  currentHeading = heading;
-  currentPitch = e.beta != null ? (e.beta - 90) : 0;
-  const t = $('compass-track');
-  if (t) t.style.transform = `translateX(${-currentHeading * 1.2}px)`;
-}
 
 // ─── Three.js init + GLB load (runs on page load) ──────────
 async function initThree() {
@@ -406,7 +443,7 @@ function onResize() {
 }
 
 function maybeReadyToStart() {
-  if (cameraOn && motionOn && modelReady) $('start-btn').disabled = false;
+  if (window.gpz.cameraOn && window.gpz.motionOn && modelReady) $('start-btn').disabled = false;
 }
 
 $('start-btn').addEventListener('click', startGame);
@@ -462,7 +499,7 @@ function spawnZombie(approachMs) {
   const offset = inFront
     ? (Math.random() - 0.5) * 180
     : (Math.random() < 0.5 ? 1 : -1) * (90 + Math.random() * 90);
-  const worldHeading = ((currentHeading + offset) % 360 + 360) % 360;
+  const worldHeading = ((window.gpz.currentHeading + offset) % 360 + 360) % 360;
 
   // Clone model (skeletal — must use SkeletonUtils.clone)
   const model = SkeletonUtils.clone(zombieGltf.scene);
@@ -504,8 +541,8 @@ function renderLoop(now) {
   // Camera rotation from phone orientation
   // YXZ order with yaw=heading, pitch=pitch — negate heading because compass goes clockwise
   camera3d.rotation.set(
-    THREE.MathUtils.degToRad(Math.max(-60, Math.min(60, currentPitch))),
-    THREE.MathUtils.degToRad(-currentHeading),
+    THREE.MathUtils.degToRad(Math.max(-60, Math.min(60, window.gpz.currentPitch))),
+    THREE.MathUtils.degToRad(-window.gpz.currentHeading),
     0
   );
 
@@ -561,7 +598,7 @@ function renderLoop(now) {
     // Off-screen detection (z>1 = behind camera, |x|>1 or |y|>1 = outside frustum)
     if (projected.z > 1) {
       // Behind player — mark side based on heading delta
-      let dh = z.worldHeading - currentHeading;
+      let dh = z.worldHeading - window.gpz.currentHeading;
       while (dh > 180) dh -= 360; while (dh < -180) dh += 360;
       if (dh > 0) offscreenByEdge.right++; else offscreenByEdge.left++;
     } else if (projected.x < -1.05) offscreenByEdge.left++;
