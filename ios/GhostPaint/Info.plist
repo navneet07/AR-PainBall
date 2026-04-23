@@ -27,15 +27,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_ghostpaint._tcp</string>
-		<string>_ghostpaint._tcp.</string>
-	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>GhostPaint uses the camera to detect player bibs during matches.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>GhostPaint connects to a local Mac game server on your WiFi or hotspot.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Optional minimap uses GPS when outdoors.</string>
 	<key>NSMotionUsageDescription</key>

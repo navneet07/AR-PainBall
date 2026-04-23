@@ -15,10 +15,16 @@ enum ClientPhase {
     case ended
 }
 
+// ─── room info ──────────────────────────────────────────────
+struct RoomInfo: Codable, Equatable {
+    let code: String
+    let isHost: Bool
+}
+
 // ─── incoming messages (server → client) ───────────────────
 enum ServerMessage: Decodable {
-    case joined(Player)
-    case state(PublicState)
+    case roomJoined(room: RoomInfo, you: Player)
+    case state(PublicState, roomCode: String?)
     case gameStart
     case hit(shooterId: String, victimId: String, damage: Int, hp: Int)
     case damage(shooterId: String, amount: Int, hp: Int)
@@ -33,17 +39,23 @@ enum ServerMessage: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case type, you, state, shooterId, victimId, damage, hp, amount
-        case playerId, winnerId, reason, ammo, error
+        case playerId, winnerId, reason, ammo, error, room, roomCode
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let type = try c.decode(String.self, forKey: .type)
         switch type {
-        case "joined":
-            self = .joined(try c.decode(Player.self, forKey: .you))
+        case "room_joined":
+            self = .roomJoined(
+                room: try c.decode(RoomInfo.self, forKey: .room),
+                you:  try c.decode(Player.self,   forKey: .you)
+            )
         case "state":
-            self = .state(try c.decode(PublicState.self, forKey: .state))
+            self = .state(
+                try c.decode(PublicState.self, forKey: .state),
+                roomCode: try c.decodeIfPresent(String.self, forKey: .roomCode)
+            )
         case "game_start":
             self = .gameStart
         case "hit":
@@ -87,7 +99,8 @@ enum ServerMessage: Decodable {
 
 // ─── outgoing messages (client → server) ───────────────────
 enum ClientMessage: Encodable {
-    case join(name: String)
+    case createRoom(name: String)
+    case joinRoom(code: String, name: String)
     case ready(Bool)
     case fire(targetBib: String?, worldPos: [Double]?)
     case position(lat: Double, lng: Double, heading: Double)
@@ -96,14 +109,18 @@ enum ClientMessage: Encodable {
     case leave
 
     enum CodingKeys: String, CodingKey {
-        case type, name, ready, targetBib, worldPos, lat, lng, heading
+        case type, name, code, ready, targetBib, worldPos, lat, lng, heading
     }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .join(let name):
-            try c.encode("join", forKey: .type)
+        case .createRoom(let name):
+            try c.encode("create_room", forKey: .type)
+            try c.encode(name, forKey: .name)
+        case .joinRoom(let code, let name):
+            try c.encode("join_room", forKey: .type)
+            try c.encode(code, forKey: .code)
             try c.encode(name, forKey: .name)
         case .ready(let r):
             try c.encode("ready", forKey: .type)

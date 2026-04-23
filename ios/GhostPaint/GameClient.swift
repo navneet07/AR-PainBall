@@ -1,26 +1,36 @@
-// GhostPaint · WebSocket client + Bonjour browser
+// GhostPaint · WebSocket client + cloud URL bootstrap
 // ObservableObject that the whole UI reads from.
+//
+// Architecture (v0.3 · cloud):
+//   1. fetchCurrentURL() hits raw.githubusercontent.com/.../server/current-url.txt
+//      to get the Lightning Studio tunnel URL (which rotates).
+//   2. Converts https://… → wss://…/ws?role=player and opens the WebSocket.
+//   3. Sends create_room or join_room with name + optional code.
+//   4. Handles room_joined, state, and gameplay messages as before.
 
 import Foundation
 import SwiftUI
-import Network
 
 @MainActor
 final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate {
 
+    // ─── public state ───────────────────────────────────────
     @Published var phase: ClientPhase = .disconnected
-    @Published var serverURL: URL? = nil      // ws://host:port/ws?role=player
+    @Published var serverURL: URL? = nil              // resolved wss:// URL
     @Published var me: Player? = nil
     @Published var state: PublicState? = nil
-    @Published var discoveredHosts: [DiscoveredHost] = []
+    @Published var roomCode: String? = nil
+    @Published var isHost: Bool = false
     @Published var killFeedTicker: [KillEntry] = []
     @Published var lastDamageAt: Date? = nil
     @Published var iJustHit: Bool = false
     @Published var iJustKilled: Bool = false
     @Published var errorText: String? = nil
-    @Published var debugLog: [String] = []       // last ~30 lines of activity
-    @Published var rawLastMessage: String = ""   // for deep debugging
+    @Published var statusText: String? = nil          // "Waking server…", etc.
+    @Published var debugLog: [String] = []
+    @Published var rawLastMessage: String = ""
 
+    // ─── debug helper ───────────────────────────────────────
     private func debug(_ line: String) {
         let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         debugLog.append("\(stamp) \(line)")
@@ -28,115 +38,128 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
         print("[GAMECLIENT] \(line)")
     }
 
-    struct DiscoveredHost: Identifiable, Equatable {
-        let id = UUID()
-        let name: String
-        let host: String
-        let port: Int
-    }
+    // ─── URL bootstrap source (stable, never changes) ───────
+    private let bootstrapURL = URL(string:
+        "https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt"
+    )!
 
+    // ─── reconnect / resume bookkeeping ─────────────────────
+    private enum PendingAction {
+        case none
+        case host(name: String)
+        case join(code: String, name: String)
+    }
+    private var pendingAction: PendingAction = .none
     private var task: URLSessionWebSocketTask? = nil
-    private var browser: NWBrowser? = nil
     private var reconnectWorkItem: DispatchWorkItem? = nil
-    private var manualURL: URL? = nil
-    private var pendingJoinName: String? = nil   // queued until socket opens
-    private var savedName: String? = nil         // for reconnect
+    private var cachedOrigin: URL? = nil              // https://xxx.trycloudflare.com
 
-    // ─── Bonjour discovery ──────────────────────────────────
-    // Browses for _ghostpaint._tcp services on local.  For each service found,
-    // opens a short-lived NWConnection to resolve the real hostname + port,
-    // then populates discoveredHosts with usable IP:port pairs.
-    func startBrowsing() {
-        let params = NWParameters()
-        params.includePeerToPeer = false
-        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_ghostpaint._tcp", domain: "local."), using: params)
-        browser.browseResultsChangedHandler = { [weak self] results, _ in
-            Task { @MainActor in
-                for result in results {
-                    self?.resolve(result)
-                }
-            }
-        }
-        browser.start(queue: .main)
-        self.browser = browser
+    // ─── public entry points ────────────────────────────────
+
+    /// Host a new room. Server will reply with a 6-digit code.
+    func host(name: String) {
+        pendingAction = .host(name: name)
+        startConnectFlow()
     }
 
-    private func resolve(_ result: NWBrowser.Result) {
-        guard case let .service(serviceName, _, _, _) = result.endpoint else { return }
-        let conn = NWConnection(to: result.endpoint, using: .tcp)
-        conn.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                // Extract resolved remote endpoint → real host + port
-                if let remote = conn.currentPath?.remoteEndpoint {
-                    if case let .hostPort(host, port) = remote {
-                        let hostString: String = {
-                            switch host {
-                            case .name(let n, _): return n
-                            case .ipv4(let a):    return "\(a)"
-                            case .ipv6(let a):    return "\(a)"
-                            @unknown default:     return "\(host)"
-                            }
-                        }()
-                        Task { @MainActor in
-                            let entry = DiscoveredHost(name: serviceName, host: hostString, port: Int(port.rawValue))
-                            self?.upsertDiscoveredHost(entry)
-                        }
-                    }
-                }
-                conn.cancel()
-            case .failed, .cancelled:
-                conn.cancel()
-            default:
-                break
-            }
-        }
-        conn.start(queue: .main)
+    /// Join an existing room by code.
+    func join(code: String, name: String) {
+        pendingAction = .join(code: code, name: name)
+        startConnectFlow()
     }
 
-    private func upsertDiscoveredHost(_ h: DiscoveredHost) {
-        if let idx = discoveredHosts.firstIndex(where: { $0.name == h.name }) {
-            discoveredHosts[idx] = h
+    /// Cancel everything and go back to disconnected.
+    func leave() {
+        send(.leave)
+        task?.cancel(with: .goingAway, reason: nil)
+        task = nil
+        reconnectWorkItem?.cancel()
+        reconnectWorkItem = nil
+        pendingAction = .none
+        phase = .disconnected
+        me = nil
+        state = nil
+        roomCode = nil
+        isHost = false
+        errorText = nil
+        statusText = nil
+    }
+
+    // ─── connect flow ───────────────────────────────────────
+    private func startConnectFlow() {
+        errorText = nil
+        phase = .connecting
+        statusText = "Resolving server…"
+        Task { await self.connectFlow(forceRefresh: false) }
+    }
+
+    private func connectFlow(forceRefresh: Bool) async {
+        // 1. Get origin URL (cached if we already have one)
+        let origin: URL
+        if let cached = cachedOrigin, !forceRefresh {
+            origin = cached
         } else {
-            discoveredHosts.append(h)
+            statusText = "Resolving server…"
+            guard let fetched = await fetchCurrentURL() else {
+                phase = .disconnected
+                errorText = "Can't reach the bootstrap URL. Check your connection."
+                statusText = nil
+                return
+            }
+            cachedOrigin = fetched
+            origin = fetched
+            debug("bootstrap origin: \(origin.absoluteString)")
+        }
+
+        // 2. Build wss URL
+        guard let wsURL = makeWebSocketURL(origin: origin) else {
+            phase = .disconnected
+            errorText = "Bad server URL: \(origin.absoluteString)"
+            statusText = nil
+            return
+        }
+        serverURL = wsURL
+        statusText = "Waking server…"
+
+        // 3. Open socket
+        openSocket(url: wsURL)
+    }
+
+    /// Fetches the current tunnel URL from GitHub raw. ~1s.
+    private func fetchCurrentURL() async -> URL? {
+        var req = URLRequest(url: bootstrapURL)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 10
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            let trimmed = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let url = URL(string: trimmed), trimmed.hasPrefix("http") else {
+                debug("fetch URL: malformed contents: \(trimmed.prefix(80))")
+                return nil
+            }
+            return url
+        } catch {
+            debug("fetch URL failed: \(error.localizedDescription)")
+            return nil
         }
     }
 
-    func autoConnect() async {
-        startBrowsing()
-        // v1 strategy: if user hasn't typed an IP, wait briefly for Bonjour, otherwise fall back.
-    }
-
-    // ─── connect + auto-join in one shot ────────────────────
-    /// Opens a socket and queues a join message. The join is sent the moment
-    /// the socket reaches .running state (via URLSessionWebSocketDelegate).
-    /// Single-button UX: user enters host + port + name, taps once.
-    func connectAndJoin(host: String, port: Int = 8200, name: String) {
-        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "http://", with: "")
-            .replacingOccurrences(of: "https://", with: "")
-            .replacingOccurrences(of: "ws://", with: "")
-        let urlString = "ws://\(trimmedHost):\(port)/ws?role=player"
-        guard let url = URL(string: urlString) else {
-            self.errorText = "Bad host/port"; return
+    /// Converts `https://xxx.trycloudflare.com` → `wss://xxx.trycloudflare.com/ws?role=player`.
+    private func makeWebSocketURL(origin: URL) -> URL? {
+        guard var comps = URLComponents(url: origin, resolvingAgainstBaseURL: false) else { return nil }
+        switch comps.scheme {
+        case "https":  comps.scheme = "wss"
+        case "http":   comps.scheme = "ws"
+        default:       comps.scheme = "wss"
         }
-        self.manualURL = url
-        self.serverURL = url
-        self.phase = .connecting
-        self.errorText = nil
-        self.pendingJoinName = name
-        self.savedName = name
-        openSocket(url: url)
-    }
-
-    /// Legacy entry point — connects without auto-joining.
-    func connect(host: String, port: Int = 8200) {
-        connectAndJoin(host: host, port: port, name: "Ghost")
+        comps.path = "/ws"
+        comps.query = "role=player"
+        return comps.url
     }
 
     private func openSocket(url: URL) {
         task?.cancel(with: .goingAway, reason: nil)
-        // delegateQueue: nil → callbacks on a background queue; we hop to MainActor inside.
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         let t = session.webSocketTask(with: url)
         t.resume()
@@ -150,12 +173,8 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
                                 didOpenWithProtocol protocolName: String?) {
         Task { @MainActor in
             self.debug("WS OPEN")
-            if let name = self.pendingJoinName {
-                self.pendingJoinName = nil
-                self.phase = .joining
-                self.debug("auto-sending join name=\(name)")
-                self.send(.join(name: name))
-            }
+            self.statusText = nil
+            self.sendPendingAction()
         }
     }
 
@@ -171,11 +190,25 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
         }
     }
 
+    /// Replay the queued action once the socket is open.
+    private func sendPendingAction() {
+        switch pendingAction {
+        case .host(let name):
+            phase = .joining
+            debug("→ create_room name=\(name)")
+            send(.createRoom(name: name))
+        case .join(let code, let name):
+            phase = .joining
+            debug("→ join_room code=\(code) name=\(name)")
+            send(.joinRoom(code: code, name: name))
+        case .none:
+            break
+        }
+    }
+
     private func receiveLoop() {
         task?.receive { [weak self] result in
             guard let self = self else { return }
-            // Always hop to MainActor — dispatch AND next receive-loop fire there,
-            // preventing races with @Published writes.
             Task { @MainActor in
                 switch result {
                 case .failure(let err):
@@ -199,15 +232,13 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
     }
 
     private func scheduleReconnect() {
-        guard let url = manualURL else { return }
+        if case .none = pendingAction { return }
         reconnectWorkItem?.cancel()
-        // Re-arm the auto-join for the reconnect attempt
-        if let name = self.savedName, self.pendingJoinName == nil {
-            self.pendingJoinName = name
-        }
         let item = DispatchWorkItem { [weak self] in
-            self?.phase = .connecting
-            self?.openSocket(url: url)
+            guard let self = self else { return }
+            self.phase = .connecting
+            // On reconnect, re-fetch URL in case the tunnel rotated while we were down.
+            Task { await self.connectFlow(forceRefresh: true) }
         }
         reconnectWorkItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: item)
@@ -225,12 +256,17 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
             return
         }
         switch msg {
-        case .joined(let p):
-            self.me = p
+        case .roomJoined(let room, let you):
+            self.me = you
+            self.roomCode = room.code
+            self.isHost = room.isHost
             self.phase = .inLobby
-            debug("JOINED as \(p.name)/\(p.bibId)")
-        case .state(let s):
+            self.statusText = nil
+            debug("ROOM_JOINED code=\(room.code) host=\(room.isHost) as \(you.name)/\(you.bibId)")
+
+        case .state(let s, let roomCode):
             self.state = s
+            if let rc = roomCode, self.roomCode == nil { self.roomCode = rc }
             let prev = self.phase
             switch s.phase {
             case "lobby":     if self.me != nil { self.phase = .inLobby }
@@ -242,42 +278,54 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
             if prev != self.phase {
                 debug("STATE phase: \(prev) → \(self.phase) (server=\(s.phase))")
             }
+
         case .gameStart:
             debug("GAME_START → .playing")
             self.phase = .playing
+
         case .hit(let shooterId, _, _, _):
             if shooterId == me?.id {
                 self.iJustHit = true
                 Haptics.medium()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.iJustHit = false }
             }
+
         case .damage(_, _, _):
             self.lastDamageAt = Date()
             Haptics.damage()
+
         case .kill(let shooterId, _):
             if shooterId == me?.id {
                 self.iJustKilled = true
                 Haptics.kill()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.iJustKilled = false }
             }
+
         case .respawn:
             break
+
         case .gameEnd:
             self.phase = .ended
+
         case .reloadComplete, .shotMissed, .dryFire:
             break
+
         case .error(let e):
             self.errorText = e
+            debug("SERVER ERROR: \(e)")
+            // Hard errors (e.g. "Room not found") mean we shouldn't keep retrying.
+            if e.lowercased().contains("not found") || e.lowercased().contains("in progress") {
+                pendingAction = .none
+                task?.cancel(with: .goingAway, reason: nil)
+                phase = .disconnected
+            }
+
         case .unknown:
             break
         }
     }
 
-    // ─── send ───────────────────────────────────────────────
-    func join(name: String) {
-        phase = .joining
-        send(.join(name: name))
-    }
+    // ─── outgoing ───────────────────────────────────────────
     func toggleReady() {
         guard let me = me, let p = state?.players.first(where: { $0.id == me.id }) else { return }
         send(.ready(!p.ready))
@@ -286,18 +334,8 @@ final class GameClient: NSObject, ObservableObject, URLSessionWebSocketDelegate 
         send(.fire(targetBib: targetBib, worldPos: worldPos))
         Haptics.fire()
     }
-    func forceStart() {
-        send(.forceStart)
-    }
-    func resetLobby() {
-        send(.resetLobby)
-    }
-    func leave() {
-        send(.leave)
-        task?.cancel(with: .goingAway, reason: nil)
-        phase = .disconnected
-        me = nil
-    }
+    func forceStart() { send(.forceStart) }
+    func resetLobby() { send(.resetLobby) }
 
     private func send(_ msg: ClientMessage) {
         guard let task = task else { return }

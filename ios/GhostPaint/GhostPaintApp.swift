@@ -39,6 +39,5 @@ struct ContentView: View {
             // Always-visible debug overlay · tap pill to expand
             DebugOverlay()
         }
-        .task { await client.autoConnect() }
     }
 }
