@@ -23,7 +23,8 @@ import {
 } from './game.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.GHOSTPAINT_PORT || 8200);
+// Render + Railway + Heroku set PORT; Lightning used GHOSTPAINT_PORT; default 8200.
+const PORT = Number(process.env.PORT || process.env.GHOSTPAINT_PORT || 8200);
 
 // ─── ROOMS ──────────────────────────────────────────────────
 const ROOMS = new Map(); // code → Room
