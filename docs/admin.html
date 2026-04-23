@@ -251,7 +251,8 @@
 <footer>GHOSTPAINT · MANAGER v2 · CLOUD</footer>
 
 <script>
-const BOOTSTRAP_URL = 'https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt';
+const BOOTSTRAP_URL = './current-url.txt';
+const BOOTSTRAP_FALLBACK = 'https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt';
 let ws, state = null, metrics = null;
 let eventBuffer = [];
 let wsOrigin = null;
@@ -261,8 +262,13 @@ async function resolveOrigin() {
       location.hostname.endsWith('.cloudspaces.litng.ai')) {
     return location.protocol + '//' + location.host;
   }
-  const r = await fetch(BOOTSTRAP_URL, { cache: 'no-store' });
-  return (await r.text()).trim();
+  const tryFetch = async (u) => {
+    const r = await fetch(u + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return (await r.text()).trim();
+  };
+  try { return await tryFetch(BOOTSTRAP_URL); }
+  catch { return await tryFetch(BOOTSTRAP_FALLBACK); }
 }
 
 async function connect() {

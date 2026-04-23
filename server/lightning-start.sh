@@ -69,17 +69,21 @@ if [ -n "$URL" ]; then
   # write url to a file for downstream scripts
   echo "$URL" > /tmp/ghostpaint-url.txt
 
-  # ─── 6. publish URL to GitHub so iOS + keep-alive can find it ───
-  URL_FILE="$REPO_DIR/server/current-url.txt"
-  CURRENT="$(cat "$URL_FILE" 2>/dev/null || true)"
+  # ─── 6. publish URL to BOTH locations ──────────────────────────
+  # server/current-url.txt   → iOS native client reads this via raw.github
+  # docs/current-url.txt     → PWA reads this same-origin (fast CDN, <1 min)
+  SRV_FILE="$REPO_DIR/server/current-url.txt"
+  DOCS_FILE="$REPO_DIR/docs/current-url.txt"
+  CURRENT="$(cat "$DOCS_FILE" 2>/dev/null || true)"
   if [ "$CURRENT" != "$URL" ]; then
-    echo "$URL" > "$URL_FILE"
+    echo "$URL" > "$SRV_FILE"
+    echo "$URL" > "$DOCS_FILE"
     cd "$REPO_DIR"
-    git add server/current-url.txt
+    git add server/current-url.txt docs/current-url.txt
     if git -c user.name=GhostPaintStudio -c user.email=studio@ghostpaint.local \
          commit -m "chore: publish new tunnel URL ($URL)" > /dev/null 2>&1; then
       if git push origin main > /dev/null 2>&1; then
-        echo "  📡 URL published to GitHub (clients + keep-alive will pick it up)"
+        echo "  📡 URL published to GitHub (PWA + iOS + keep-alive will pick it up)"
       else
         echo "  ⚠ git push failed — check PAT config in ~/.git-credentials"
       fi

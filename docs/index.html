@@ -403,7 +403,10 @@
 //  GhostPaint PWA · v0.4 camera + QR + URL bootstrap
 // ═══════════════════════════════════════════════════════════
 
-const BOOTSTRAP_URL = 'https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt';
+// Same-origin first (fast GH Pages CDN, no cross-origin lag).
+// raw.githubusercontent.com fallback for when this page is opened from non-Pages origins.
+const BOOTSTRAP_URL = './current-url.txt';
+const BOOTSTRAP_FALLBACK = 'https://raw.githubusercontent.com/navneet07/AR-PainBall/main/server/current-url.txt';
 
 let ws = null, me = null, state = null;
 let aimedBib = null, roomCode = null, isHost = false;
@@ -431,16 +434,18 @@ async function resolveServerOrigin() {
       location.hostname.endsWith('.cloudspaces.litng.ai')) {
     return location.protocol + '//' + location.host;
   }
-  // cache-bust to dodge iOS Safari + GitHub raw CDN staleness
-  const url = BOOTSTRAP_URL + '?t=' + Date.now();
-  try {
-    const resp = await fetch(url, { cache: 'no-store' });
+  // Try same-origin first (fast), fall back to raw.github (5-min lag)
+  const tryFetch = async (u) => {
+    const resp = await fetch(u + '?t=' + Date.now(), { cache: 'no-store' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const txt = (await resp.text()).trim();
     if (!txt.startsWith('http')) throw new Error('bad URL: ' + txt.slice(0, 40));
     return txt;
-  } catch (e) {
-    throw new Error('Bootstrap fetch failed: ' + e.message);
+  };
+  try { return await tryFetch(BOOTSTRAP_URL); }
+  catch (e1) {
+    try { return await tryFetch(BOOTSTRAP_FALLBACK); }
+    catch (e2) { throw new Error('Bootstrap failed on both: ' + e1.message); }
   }
 }
 
