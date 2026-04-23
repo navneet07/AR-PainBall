@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"/>
-<title>GhostPaint · Zombies</title>
+<title>GhostPaint · Zombies AR</title>
 <link rel="manifest" href="manifest.webmanifest"/>
 <link rel="apple-touch-icon" href="icon-180.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -14,29 +14,25 @@
     --cyan: #5cf6ff; --amethyst: #c8a6ff; --blood: #ff3040;
     --gold: #ffd166; --green: #69f0ae; --rot: #6dff7e;
     --bg-0: #0a0612; --ink: #e9e3ff; --ink-dim: #8b86b3;
-    --glow: 0 0 12px rgba(92,246,255,0.4);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; background: #000; color: var(--ink);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     height: 100vh; overflow: hidden;
-    -webkit-user-select: none; user-select: none;
-    -webkit-touch-callout: none; }
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
   .world-gradient {
     position: fixed; inset: 0; z-index: 0;
-    background:
-      radial-gradient(circle at 50% 80%, rgba(109,255,126,0.06), transparent 50%),
-      radial-gradient(circle at 30% 30%, rgba(255,48,64,0.08), transparent 40%),
-      linear-gradient(135deg, #0a0612 0%, #15102a 40%, #0a0612 100%);
+    background: radial-gradient(circle at 50% 80%, rgba(109,255,126,0.06), transparent 50%),
+                linear-gradient(135deg, #0a0612 0%, #15102a 40%, #0a0612 100%);
   }
   video.world-cam {
     position: fixed; inset: 0; z-index: 1;
     width: 100vw; height: 100vh; object-fit: cover;
-    display: none; filter: brightness(0.6) saturate(0.85);
+    display: none; filter: brightness(0.55) saturate(0.85);
   }
   video.world-cam.on { display: block; }
-  body.cam-on .world-gradient { opacity: 0.5; }
+  body.cam-on .world-gradient { opacity: 0.4; }
 
   /* Top HUD */
   .hud-top {
@@ -52,6 +48,36 @@
   .hud-top .lives { margin-left: auto; }
   .hud-top .heart { color: var(--blood); font-size: 16px; margin: 0 2px; text-shadow: 0 0 8px var(--blood); }
   .hud-top .heart.lost { color: rgba(255,48,64,0.15); text-shadow: none; }
+
+  /* Compass strip showing current heading */
+  .compass-strip {
+    position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
+    width: min(420px, 90vw); height: 22px; z-index: 5;
+    border: 1px solid rgba(92,246,255,0.3); border-radius: 2px;
+    background: rgba(10,6,18,0.55); overflow: hidden;
+    font-size: 10px; color: var(--cyan);
+  }
+  .compass-track { position: absolute; top: 3px; left: 0; white-space: nowrap;
+    letter-spacing: 6px; transition: transform 0.08s linear; }
+  .compass-strip::before { content: "▼"; position: absolute; top: -10px; left: 50%;
+    transform: translateX(-50%); color: var(--cyan); font-size: 10px; }
+
+  /* Off-screen zombie indicators */
+  .edge-marker {
+    position: fixed; z-index: 6; pointer-events: none;
+    width: 50px; height: 50px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--rot); font-size: 24px;
+    text-shadow: 0 0 10px var(--rot), 0 0 20px var(--rot);
+    animation: edgePulse 1.5s ease-in-out infinite;
+  }
+  @keyframes edgePulse {
+    0%,100% { opacity: 0.55; transform: scale(1); }
+    50%     { opacity: 1; transform: scale(1.15); }
+  }
+  .edge-marker .count { font-size: 11px; letter-spacing: 0.1em;
+    background: rgba(10,6,18,0.85); padding: 2px 6px; border: 1px solid var(--rot);
+    color: var(--rot); border-radius: 2px; position: absolute; top: -4px; right: -8px; }
 
   /* Wave banner */
   .wave-banner {
@@ -84,9 +110,6 @@
     width: 6px; height: 6px; background: var(--blood); border-radius: 50%;
     box-shadow: 0 0 10px var(--blood);
   }
-  .reticle .cross {
-    position: absolute; inset: 0;
-  }
   .reticle .cross::before, .reticle .cross::after {
     content: ""; position: absolute; background: var(--cyan); box-shadow: 0 0 6px var(--cyan);
   }
@@ -98,7 +121,6 @@
   }
   .reticle.firing .ring { border-color: var(--blood); box-shadow: 0 0 20px var(--blood); }
 
-  /* FIRE button */
   .fire-btn {
     position: fixed; bottom: 24px; right: 24px; z-index: 8;
     width: 92px; height: 92px; border-radius: 50%;
@@ -110,43 +132,34 @@
   }
   .fire-btn:active { transform: scale(0.92); }
 
-  /* Damage vignette */
   .damage-flash { position: fixed; inset: 0; pointer-events: none; z-index: 6;
     box-shadow: inset 0 0 120px 30px rgba(255,48,64,0); transition: box-shadow 0.2s; }
   .damage-flash.active { box-shadow: inset 0 0 200px 50px rgba(255,48,64,0.85); }
 
-  /* Zombies */
+  /* World-anchored zombies */
   #zombies { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
   .zombie {
-    position: absolute; width: 90px; height: 110px;
-    pointer-events: auto; cursor: crosshair;
-    transition: transform 1.5s linear;
-    will-change: transform, left, top;
-    animation: zombieSpawn 0.5s ease-out, zombieIdle 1.4s ease-in-out infinite;
+    position: absolute; pointer-events: auto; cursor: crosshair;
+    will-change: transform;
+    transform-origin: center bottom;
+    animation: zombieIdle 1.4s ease-in-out infinite;
   }
-  .zombie svg { width: 100%; height: 100%;
+  .zombie svg { width: 100%; height: 100%; display: block;
     filter: drop-shadow(0 4px 12px rgba(0,0,0,0.7)) drop-shadow(0 0 6px rgba(109,255,126,0.4)); }
   .zombie.dying {
     animation: zombieDie 0.6s ease-out forwards !important;
     pointer-events: none;
   }
-  .zombie.fast { animation-duration: 0.5s, 0.7s; }
-
-  @keyframes zombieSpawn {
-    0%   { opacity: 0; transform: scale(0.4) translateY(20px); }
-    100% { opacity: 1; transform: scale(1) translateY(0); }
-  }
   @keyframes zombieIdle {
-    0%,100% { transform: translateY(0) rotate(-2deg); }
-    50%     { transform: translateY(-8px) rotate(2deg); }
+    0%,100% { filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(109,255,126,0.4)); }
+    50%     { filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(109,255,126,0.7)); }
   }
   @keyframes zombieDie {
-    0%   { opacity: 1; transform: scale(1); filter: brightness(1); }
-    25%  { opacity: 1; transform: scale(1.3); filter: brightness(2.5) hue-rotate(40deg); }
-    100% { opacity: 0; transform: scale(0.6) translateY(40px) rotate(20deg); filter: brightness(0.3); }
+    0%   { opacity: 1; }
+    25%  { opacity: 1; filter: brightness(2.5) hue-rotate(40deg); }
+    100% { opacity: 0; transform: scale(0.5) translateY(40px) rotate(20deg); filter: brightness(0.3); }
   }
 
-  /* Hit-points popup */
   .hit-pop {
     position: fixed; pointer-events: none; z-index: 9;
     color: var(--gold); font-size: 18px; font-weight: 700;
@@ -159,7 +172,6 @@
     100% { opacity: 0; transform: translate(-50%, -200%) scale(1); }
   }
 
-  /* Muzzle burst */
   .muzzle-burst {
     position: fixed; pointer-events: none; z-index: 7;
     width: 100px; height: 100px; transform: translate(-50%, -50%);
@@ -176,7 +188,6 @@
     100% { transform: translate(-50%, -180%) rotate(var(--a)) scaleY(1); opacity: 0; }
   }
 
-  /* Overlay panels (start, game-over) */
   .overlay { position: fixed; inset: 0; background: rgba(10,6,18,0.85);
     backdrop-filter: blur(10px); z-index: 20;
     display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 20px; padding: 30px; }
@@ -190,9 +201,8 @@
     letter-spacing: 0.22em; text-transform: uppercase; cursor: pointer; border-radius: 3px;
     margin-top: 12px; touch-action: manipulation;
     box-shadow: 0 0 14px rgba(109,255,126,0.25); }
+  .card button[disabled] { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
   .card button:active { background: rgba(109,255,126,0.15); }
-  .card button.danger { color: var(--blood); border-color: var(--blood); box-shadow: 0 0 14px rgba(255,48,64,0.25); }
-  .card button.ghost  { color: var(--ink-dim); border-color: var(--ink-dim); box-shadow: none; }
   .stat-line { display: flex; justify-content: space-between; padding: 6px 0;
     border-bottom: 1px solid rgba(109,255,126,0.15); font-size: 13px; }
   .stat-line .v { color: var(--gold); font-variant-numeric: tabular-nums; }
@@ -214,11 +224,11 @@
 <div class="overlay" id="start-overlay">
   <div class="card">
     <img src="icon.svg" alt="" style="display:block;margin:-6px auto 8px;width:120px;height:120px;filter:drop-shadow(0 0 24px rgba(109,255,126,0.5));"/>
-    <h1>ZOMBIES</h1>
-    <p>Solo arcade. Zombies spawn at the edges and crawl toward the center. Tap them OR keep the reticle on one and press FIRE. Three lives. Survive as many waves as you can.</p>
+    <h1>ZOMBIES · AR</h1>
+    <p>World-anchored zombies. They spawn in compass directions around you. <strong>Pan your phone</strong> to find them — green ◀ ▶ markers point to off-screen zombies. Tap to kill, or center reticle + FIRE.</p>
     <button id="enable-cam-btn">📷  ENABLE CAMERA</button>
+    <button id="enable-motion-btn">🧭  ENABLE MOTION (compass)</button>
     <button id="start-btn" disabled>BEGIN HUNT</button>
-    <a class="back-link" style="position:relative;top:auto;left:auto;display:block;text-align:center;margin-top:12px;color:var(--ink-dim);" href="./">← back to multiplayer</a>
   </div>
 </div>
 
@@ -230,7 +240,6 @@
     <div class="stat-line"><span>Wave reached</span><span class="v" id="end-wave">1</span></div>
     <div class="stat-line"><span>Best ever</span><span class="v" id="end-best">0</span></div>
     <button id="restart-btn">PLAY AGAIN</button>
-    <a class="back-link" style="position:relative;top:auto;left:auto;display:block;text-align:center;margin-top:6px;color:var(--ink-dim);" href="./">← back to multiplayer</a>
   </div>
 </div>
 
@@ -241,7 +250,12 @@
   <span class="lives" id="hud-lives"></span>
 </div>
 
+<div class="compass-strip" id="compass-strip" style="display:none;">
+  <div class="compass-track" id="compass-track">W  ·  ·  ·  NW  ·  ·  ·  N  ·  ·  ·  NE  ·  ·  ·  E  ·  ·  ·  SE  ·  ·  ·  S  ·  ·  ·  SW  ·  ·  ·  W</div>
+</div>
+
 <div id="zombies"></div>
+<div id="edge-markers"></div>
 
 <div class="reticle" id="reticle" style="display:none;">
   <div class="ring"></div><div class="cross"></div><div class="dot"></div>
@@ -250,10 +264,9 @@
 <div class="damage-flash" id="damage-flash"></div>
 
 <button id="fire-btn" class="fire-btn" style="display:none;">FIRE</button>
-
 <a class="back-link" href="./">← LOBBY</a>
 
-<!-- Zombie SVG template (injected per zombie) -->
+<!-- Zombie SVG template -->
 <svg id="zombie-svg-template" style="display:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 110">
   <defs>
     <radialGradient id="zEye" cx="50%" cy="50%" r="50%">
@@ -266,48 +279,57 @@
       <stop offset="100%" stop-color="#1a2218"/>
     </linearGradient>
   </defs>
-  <!-- Tattered hood/body -->
-  <path d="M 25 30
-           Q 15 20, 30 12
-           Q 45 4, 60 12
-           Q 75 20, 65 32
-           L 70 70
-           Q 75 95, 60 100
-           Q 45 105, 30 100
-           Q 15 95, 20 70 Z"
+  <path d="M 25 30 Q 15 20, 30 12 Q 45 4, 60 12 Q 75 20, 65 32
+           L 70 70 Q 75 95, 60 100 Q 45 105, 30 100 Q 15 95, 20 70 Z"
         fill="url(#zHood)" stroke="#0a140a" stroke-width="2" stroke-linejoin="round"/>
-  <!-- Tattered bottom -->
   <path d="M 30 100 L 35 108 L 40 100 L 45 110 L 50 100 L 55 108 L 60 100"
         fill="none" stroke="#0a140a" stroke-width="2"/>
-  <!-- Inner face shadow -->
   <ellipse cx="45" cy="35" rx="20" ry="18" fill="#040804"/>
-  <!-- Two glowing eyes -->
   <circle cx="36" cy="33" r="9" fill="url(#zEye)"/>
   <circle cx="36" cy="33" r="3" fill="#ffffff"/>
   <circle cx="54" cy="33" r="9" fill="url(#zEye)"/>
   <circle cx="54" cy="33" r="3" fill="#ffffff"/>
-  <!-- Snarl mouth -->
   <path d="M 36 50 L 39 52 L 42 50 L 45 53 L 48 50 L 51 52 L 54 50" stroke="#0a140a" stroke-width="2" fill="none"/>
 </svg>
 
 <script>
 // ═══════════════════════════════════════════════════════════
-//  GhostPaint Zombies · single-player arcade
+//  GhostPaint Zombies AR · world-anchored via device heading
+// ═══════════════════════════════════════════════════════════
+//
+//  Each zombie has a worldHeading (0-360 degrees, like a compass
+//  bearing) and a worldPitch (vertical look angle). As the user
+//  rotates the phone, we recompute each zombie's screen position
+//  from the difference between its world heading and the phone's
+//  current heading. Zombies that fall outside the viewport get an
+//  edge marker showing which direction to pan.
+//
+//  Distance is faked by scaling — closer zombies render bigger.
+//  Distance shrinks over time; when it hits zero, the zombie has
+//  "reached you" and you lose a life.
 // ═══════════════════════════════════════════════════════════
 
-let cameraOn = false;
+let cameraOn = false, motionOn = false;
 let game = null;
 let bestScore = Number(localStorage.getItem('gp-zombies-best') || 0);
 
+// Phone's current orientation (degrees)
+let currentHeading = 0;     // 0 = north
+let currentPitch = 0;       // 0 = horizontal, +90 = pointing up
+let baselineHeading = null; // first reading; we anchor world to this
+
 const $ = (id) => document.getElementById(id);
+
+// FOV approximation — typical phone rear camera
+const HORIZ_FOV_DEG = 65;
+const VERT_FOV_DEG  = 50;
 
 // ─── camera ────────────────────────────────────────────────
 $('enable-cam-btn').addEventListener('click', enableCamera);
 async function enableCamera() {
   if (cameraOn) return;
   if (!navigator.mediaDevices?.getUserMedia) {
-    alert('No camera access in this browser.');
-    return;
+    alert('No camera in this browser.'); return;
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -322,11 +344,52 @@ async function enableCamera() {
     document.body.classList.add('cam-on');
     $('enable-cam-btn').textContent = '✓ CAMERA ON';
     $('enable-cam-btn').disabled = true;
-    $('enable-cam-btn').style.color = 'var(--rot)';
-    $('start-btn').disabled = false;
+    maybeReadyToStart();
   } catch (e) {
-    alert('Camera denied. Settings → Safari → Camera → Allow, then reload.');
+    alert('Camera denied. Settings → Safari → Camera → Allow.');
   }
+}
+
+// ─── motion / heading ──────────────────────────────────────
+$('enable-motion-btn').addEventListener('click', enableMotion);
+async function enableMotion() {
+  if (motionOn) return;
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') { alert('Motion permission denied'); return; }
+    }
+    window.addEventListener('deviceorientation', onOrientation, true);
+    motionOn = true;
+    $('enable-motion-btn').textContent = '✓ MOTION ON';
+    $('enable-motion-btn').disabled = true;
+    maybeReadyToStart();
+  } catch (e) {
+    alert('Motion error: ' + e.message);
+  }
+}
+
+function onOrientation(e) {
+  // iOS provides webkitCompassHeading (true compass, 0=north)
+  // Android provides alpha (0-360, but device-rotation-relative)
+  const heading = (e.webkitCompassHeading != null)
+    ? e.webkitCompassHeading
+    : (e.alpha != null ? (360 - e.alpha) : null);
+  if (heading == null) return;
+  if (baselineHeading == null) baselineHeading = heading;
+  currentHeading = heading;
+  currentPitch = e.beta != null ? (e.beta - 90) : 0;  // 0 = phone held vertical, looking forward
+  updateCompassStrip();
+}
+
+function updateCompassStrip() {
+  const t = $('compass-track');
+  if (t) t.style.transform = `translateX(${-currentHeading * 1.2}px)`;
+}
+
+function maybeReadyToStart() {
+  if (cameraOn && motionOn) $('start-btn').disabled = false;
 }
 
 $('start-btn').addEventListener('click', startGame);
@@ -337,66 +400,56 @@ function startGame() {
   $('start-overlay').style.display = 'none';
   $('end-overlay').style.display = 'none';
   $('hud').style.display = 'flex';
+  $('compass-strip').style.display = 'block';
   $('reticle').style.display = 'block';
   $('fire-btn').style.display = 'block';
   document.getElementById('zombies').innerHTML = '';
+  document.getElementById('edge-markers').innerHTML = '';
 
   game = {
     score: 0, wave: 0, lives: 3,
-    zombies: new Map(),         // id → element + state
+    zombies: new Map(),
     nextZombieId: 1,
     spawnTimer: null,
     waveTimer: null,
-    moveTimer: null,
     over: false,
-    waveStartedAt: 0,
     killsThisWave: 0,
   };
   renderHud();
   beginNextWave();
-  game.moveTimer = setInterval(tickPositions, 50);   // 20Hz movement update
+  // World render loop — recomputes screen positions every frame
+  game.rafLoop = requestAnimationFrame(renderWorld);
 }
 
 function beginNextWave() {
   if (!game || game.over) return;
   game.wave++;
   game.killsThisWave = 0;
-  game.waveStartedAt = Date.now();
   showWaveBanner('WAVE ' + game.wave);
   renderHud();
 
-  // Difficulty curve
-  const spawnIntervalMs = Math.max(700, 4000 - game.wave * 350);
-  const travelMs = Math.max(4500, 13000 - game.wave * 700);
+  const spawnIntervalMs = Math.max(900, 4500 - game.wave * 380);
+  const approachMs      = Math.max(7000, 18000 - game.wave * 900);
 
   clearInterval(game.spawnTimer);
-  game.spawnTimer = setInterval(() => spawnZombie(travelMs), spawnIntervalMs);
-
-  // Wave length: 25-35 sec, then advance
+  game.spawnTimer = setInterval(() => spawnZombie(approachMs), spawnIntervalMs);
   clearTimeout(game.waveTimer);
   game.waveTimer = setTimeout(beginNextWave, 28000);
 }
 
-function spawnZombie(travelMs) {
+function spawnZombie(approachMs) {
   if (!game || game.over) return;
   const id = game.nextZombieId++;
-  // Pick edge spawn position
-  const edges = ['top', 'right', 'bottom', 'left'];
-  const edge = edges[Math.floor(Math.random() * 4)];
-  let sx, sy;
-  if (edge === 'top')    { sx = Math.random() * window.innerWidth; sy = -120; }
-  if (edge === 'right')  { sx = window.innerWidth + 120; sy = Math.random() * window.innerHeight; }
-  if (edge === 'bottom') { sx = Math.random() * window.innerWidth; sy = window.innerHeight + 120; }
-  if (edge === 'left')   { sx = -120; sy = Math.random() * window.innerHeight; }
-  const tx = window.innerWidth / 2 + (Math.random() - 0.5) * 100;
-  const ty = window.innerHeight / 2 + (Math.random() - 0.5) * 100;
+  // World heading: anywhere on the compass, slight bias toward player's current view
+  // 70% chance within ±90° of current view, 30% behind
+  const inFront = Math.random() < 0.7;
+  const offset = inFront ? (Math.random() - 0.5) * 180 : (Math.random() < 0.5 ? 1 : -1) * (90 + Math.random() * 90);
+  const worldHeading = ((currentHeading + offset) % 360 + 360) % 360;
+  const worldPitch = (Math.random() - 0.5) * 20;  // ±10° from horizon
 
   const tpl = $('zombie-svg-template');
   const el = document.createElement('div');
   el.className = 'zombie';
-  if (game.wave > 3) el.classList.add('fast');
-  el.style.left = sx + 'px';
-  el.style.top  = sy + 'px';
   el.dataset.id = id;
   el.innerHTML = tpl.outerHTML.replace(/style="display:none;"/, '').replace(/id="zombie-svg-template"/, '');
   el.addEventListener('click', () => killZombie(id, true));
@@ -404,29 +457,108 @@ function spawnZombie(travelMs) {
 
   game.zombies.set(id, {
     el,
-    sx, sy, tx, ty,
-    spawnTime: Date.now(),
-    travelMs,
+    worldHeading,
+    worldPitch,
+    distance: 1.0,             // 1.0 = far, 0 = at you
+    spawnedAt: Date.now(),
+    approachMs,
     dying: false,
+    screenX: 0, screenY: 0,    // updated each frame
   });
 }
 
-function tickPositions() {
+function renderWorld() {
   if (!game || game.over) return;
   const now = Date.now();
+  const W = window.innerWidth, H = window.innerHeight;
+  const pxPerDegX = W / HORIZ_FOV_DEG;
+  const pxPerDegY = H / VERT_FOV_DEG;
+  const edgeMarkers = document.getElementById('edge-markers');
+  edgeMarkers.innerHTML = '';
+  const offscreenByEdge = { left: 0, right: 0, top: 0, bottom: 0 };
+
   for (const [id, z] of game.zombies) {
     if (z.dying) continue;
-    const t = Math.min(1, (now - z.spawnTime) / z.travelMs);
-    const cx = z.sx + (z.tx - z.sx) * t;
-    const cy = z.sy + (z.ty - z.sy) * t;
-    z.el.style.left = (cx - 45) + 'px';   // -45 = half width
-    z.el.style.top  = (cy - 55) + 'px';   // -55 = half height
-    z.cx = cx; z.cy = cy;
-    if (t >= 1) {
-      // reached center → player loses a life
-      onZombieReach(id);
+
+    // Approach: distance shrinks linearly from 1.0 → 0 over approachMs
+    const t = (now - z.spawnedAt) / z.approachMs;
+    z.distance = Math.max(0, 1 - t);
+
+    if (z.distance <= 0) { onZombieReach(id); continue; }
+
+    // Heading delta — shortest signed angle between world and current
+    let dh = z.worldHeading - currentHeading;
+    while (dh > 180)  dh -= 360;
+    while (dh < -180) dh += 360;
+    const dp = z.worldPitch - currentPitch;
+
+    // Project onto screen
+    const screenX = W/2 + dh * pxPerDegX;
+    const screenY = H/2 - dp * pxPerDegY;
+    z.screenX = screenX; z.screenY = screenY;
+
+    // Distance-based scale (closer = bigger)
+    const baseSize = 110;
+    const scale = 0.4 + (1 - z.distance) * 1.4;   // 0.4 at far, 1.8 at point-blank
+    const w = baseSize * scale;
+    const h = baseSize * 1.22 * scale;
+
+    // Behind player? (heading delta > 90°)
+    const behind = Math.abs(dh) > 90;
+
+    if (behind) {
+      // Don't render the sprite, but show an edge indicator
+      z.el.style.display = 'none';
+      // Pick edge based on dh sign
+      if (dh > 0) offscreenByEdge.right++; else offscreenByEdge.left++;
+      continue;
     }
+
+    // On-screen test (bbox vs viewport)
+    const left = screenX - w/2, top = screenY - h/2;
+    const onscreen = (left + w > 0 && left < W && top + h > 0 && top < H);
+    if (!onscreen) {
+      z.el.style.display = 'none';
+      // Edge indicator
+      if (left + w <= 0) offscreenByEdge.left++;
+      else if (left >= W) offscreenByEdge.right++;
+      else if (top + h <= 0) offscreenByEdge.top++;
+      else if (top >= H) offscreenByEdge.bottom++;
+      continue;
+    }
+
+    // Render
+    z.el.style.display = 'block';
+    z.el.style.width = w + 'px';
+    z.el.style.height = h + 'px';
+    z.el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
   }
+
+  // Render edge markers
+  if (offscreenByEdge.left)  edgeMarkers.appendChild(makeEdgeMarker('left', offscreenByEdge.left));
+  if (offscreenByEdge.right) edgeMarkers.appendChild(makeEdgeMarker('right', offscreenByEdge.right));
+  if (offscreenByEdge.top)   edgeMarkers.appendChild(makeEdgeMarker('top', offscreenByEdge.top));
+  if (offscreenByEdge.bottom) edgeMarkers.appendChild(makeEdgeMarker('bottom', offscreenByEdge.bottom));
+
+  game.rafLoop = requestAnimationFrame(renderWorld);
+}
+
+function makeEdgeMarker(edge, count) {
+  const m = document.createElement('div');
+  m.className = 'edge-marker';
+  const arrow = { left: '◀', right: '▶', top: '▲', bottom: '▼' }[edge];
+  m.textContent = arrow;
+  if (count > 1) {
+    const c = document.createElement('span');
+    c.className = 'count'; c.textContent = count;
+    m.appendChild(c);
+  }
+  // Position on edge, vertically/horizontally centered
+  if (edge === 'left')   { m.style.left = '8px'; m.style.top = '50%'; m.style.transform = 'translateY(-50%)'; }
+  if (edge === 'right')  { m.style.right = '8px'; m.style.top = '50%'; m.style.transform = 'translateY(-50%)'; }
+  if (edge === 'top')    { m.style.top = '80px'; m.style.left = '50%'; m.style.transform = 'translateX(-50%)'; }
+  if (edge === 'bottom') { m.style.bottom = '120px'; m.style.left = '50%'; m.style.transform = 'translateX(-50%)'; }
+  return m;
 }
 
 function killZombie(id, byTap) {
@@ -434,17 +566,13 @@ function killZombie(id, byTap) {
   if (!z || z.dying) return;
   z.dying = true;
   z.el.classList.add('dying');
-  // Burst at zombie position
-  const r = z.el.getBoundingClientRect();
-  muzzleBurst(r.left + r.width/2, r.top + r.height/2);
-  showHitPop(r.left + r.width/2, r.top + r.height/2, byTap ? '+10' : '+15');
+  muzzleBurst(z.screenX, z.screenY);
+  showHitPop(z.screenX, z.screenY, byTap ? '+10' : '+15');
   game.score += byTap ? 10 : 15;
   game.killsThisWave++;
   renderHud();
   haptic(40);
   setTimeout(() => { z.el.remove(); game.zombies.delete(id); }, 600);
-
-  // Bonus wave advance if wave clears fast
   if (game.killsThisWave >= 12 + game.wave * 2) {
     clearTimeout(game.waveTimer);
     game.waveTimer = setTimeout(beginNextWave, 1500);
@@ -466,12 +594,10 @@ function onZombieReach(id) {
 function endGame() {
   game.over = true;
   clearInterval(game.spawnTimer);
-  clearInterval(game.moveTimer);
   clearTimeout(game.waveTimer);
-  // Clear remaining zombies dramatically
+  cancelAnimationFrame(game.rafLoop);
   for (const [, z] of game.zombies) z.el.classList.add('dying');
   setTimeout(() => document.getElementById('zombies').innerHTML = '', 700);
-
   if (game.score > bestScore) {
     bestScore = game.score;
     localStorage.setItem('gp-zombies-best', String(bestScore));
@@ -480,6 +606,7 @@ function endGame() {
   $('end-wave').textContent  = game.wave;
   $('end-best').textContent  = bestScore;
   $('hud').style.display = 'none';
+  $('compass-strip').style.display = 'none';
   $('reticle').style.display = 'none';
   $('fire-btn').style.display = 'none';
   $('end-overlay').style.display = 'flex';
@@ -508,35 +635,28 @@ function showWaveBanner(text) {
   setTimeout(() => b.remove(), 2100);
 }
 
-// ─── FIRE button = kill zombie closest to reticle ──────────
+// ─── FIRE button = kill zombie nearest to reticle (screen center) ──
 $('fire-btn').addEventListener('click', () => {
   if (!game || game.over) return;
-  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  const cx = window.innerWidth/2, cy = window.innerHeight/2;
   let nearest = null, nearestDist = Infinity;
   for (const [id, z] of game.zombies) {
-    if (z.dying) continue;
-    const dx = z.cx - cx, dy = z.cy - cy;
+    if (z.dying || z.el.style.display === 'none') continue;
+    const dx = z.screenX - cx, dy = z.screenY - cy;
     const d = Math.sqrt(dx*dx + dy*dy);
-    if (d < 140 && d < nearestDist) {  // 140px radius around reticle
-      nearestDist = d; nearest = id;
-    }
+    if (d < 160 && d < nearestDist) { nearestDist = d; nearest = id; }
   }
   $('reticle').classList.add('firing');
   setTimeout(() => $('reticle').classList.remove('firing'), 200);
-  if (nearest != null) {
-    killZombie(nearest, false);
-  } else {
-    muzzleBurst(cx, cy);
-    haptic(20);
-  }
+  if (nearest != null) killZombie(nearest, false);
+  else { muzzleBurst(cx, cy); haptic(20); }
 });
 
 // ─── effects ───────────────────────────────────────────────
 function muzzleBurst(x, y) {
   const burst = document.createElement('div');
   burst.className = 'muzzle-burst';
-  burst.style.left = x + 'px';
-  burst.style.top  = y + 'px';
+  burst.style.left = x + 'px'; burst.style.top = y + 'px';
   for (let i = 0; i < 8; i++) {
     const ray = document.createElement('div');
     ray.className = 'ray';
@@ -551,8 +671,7 @@ function showHitPop(x, y, text) {
   const p = document.createElement('div');
   p.className = 'hit-pop';
   p.textContent = text;
-  p.style.left = x + 'px';
-  p.style.top  = y + 'px';
+  p.style.left = x + 'px'; p.style.top = y + 'px';
   document.body.appendChild(p);
   setTimeout(() => p.remove(), 1000);
 }
