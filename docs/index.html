@@ -389,6 +389,12 @@
   <div class="v" id="ammo-value">15 / 15</div>
 </div>
 
+<div id="aim-label" style="
+     position: fixed; bottom: 130px; right: 24px; z-index: 8;
+     font-size: 10px; letter-spacing: 0.2em; font-family: ui-monospace, Menlo, monospace;
+     padding: 6px 12px; background: rgba(10,6,18,0.85);
+     border: 1px solid var(--ink-dim); color: var(--ink-dim);
+     border-radius: 3px; display: none; text-align: center; min-width: 92px;"></div>
 <button id="fire-btn" class="fire-btn" disabled>FIRE</button>
 
 <div class="damage-flash" id="damage-flash"></div>
@@ -695,8 +701,25 @@ function renderBibOverlays() {
 
 function updateFireBtnState() {
   const btn = $('fire-btn');
-  const canFire = aimedBib != null && (state?.phase === 'playing');
+  const label = $('aim-label');
+  const inMatch = state?.phase === 'playing';
+  const canFire = aimedBib != null && inMatch;
   btn.disabled = !canFire;
+  if (inMatch) {
+    label.style.display = 'block';
+    if (canFire) {
+      const t = state.players.find(p => p.bibId === aimedBib);
+      label.textContent = '◉ ' + (t?.name || aimedBib);
+      label.style.color = 'var(--blood)';
+      label.style.borderColor = 'var(--blood)';
+    } else {
+      label.textContent = 'TAP A TARGET';
+      label.style.color = 'var(--ink-dim)';
+      label.style.borderColor = 'var(--ink-dim)';
+    }
+  } else {
+    label.style.display = 'none';
+  }
 }
 
 // ─── render HUD ───────────────────────────────────────────
@@ -745,26 +768,27 @@ function render() {
       $('ammo').classList.toggle('reloading', myP.reloading);
     }
 
-    // Target cards fallback (camera off)
-    if (!cameraOn) {
-      const targets = state.players.filter(p => p.id !== me?.id);
-      $('targets').innerHTML = targets.map(p => `
-        <div class="target-card ${!p.alive ? 'dead' : ''} ${aimedBib === p.bibId ? 'aimed' : ''}" data-bib="${p.bibId}">
-          <div class="color" style="background:${p.color};color:${p.color}"></div>
-          <div class="name">${escapeHtml(p.name)}</div>
-          <div class="bib">${p.bibId}</div>
-          <div class="hp">HP ${p.hp}</div>
-        </div>
-      `).join('');
-      $('targets').querySelectorAll('.target-card').forEach(card => {
-        card.addEventListener('click', () => {
-          if (card.classList.contains('dead')) return;
-          aimedBib = card.dataset.bib;
-          updateFireBtnState();
-          render();
-        });
+    // Target cards · always visible during play as tap-to-aim UI.
+    // When camera is on + physical bibs present, the camera overlay is
+    // the fancy AR aim; cards are still the reliable fallback.
+    const targets = state.players.filter(p => p.id !== me?.id);
+    $('targets').style.display = 'flex';
+    $('targets').innerHTML = targets.map(p => `
+      <div class="target-card ${!p.alive ? 'dead' : ''} ${aimedBib === p.bibId ? 'aimed' : ''}" data-bib="${p.bibId}">
+        <div class="color" style="background:${p.color};color:${p.color}"></div>
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="bib">${p.bibId}</div>
+        <div class="hp">HP ${p.hp}</div>
+      </div>
+    `).join('');
+    $('targets').querySelectorAll('.target-card').forEach(card => {
+      card.addEventListener('click', () => {
+        if (card.classList.contains('dead')) return;
+        aimedBib = card.dataset.bib;
+        updateFireBtnState();
+        render();
       });
-    }
+    });
 
     // Scoreboard
     const sorted = [...state.players].sort((a, b) => b.kills - a.kills);
